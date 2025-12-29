@@ -1,0 +1,24 @@
+SELECT DISTINCT
+  ?genre
+  ?genreLabel
+  ?genreDescription
+  ?inception
+  ?country ?countryLabel
+  ?parentGenre ?parentGenreLabel
+  ?musicBrainzId
+WHERE {
+  ?artist wdt:P31 wd:Q215380 ;
+          wdt:P136 ?genre .
+
+  ?genre wdt:P31 wd:Q188451 .
+
+  OPTIONAL { ?genre wdt:P571 ?inception . }
+  OPTIONAL { ?genre wdt:P495 ?country . }
+  OPTIONAL { ?genre wdt:P279 ?parentGenre . }
+  OPTIONAL { ?genre wdt:P436 ?musicBrainzId . }
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+ORDER BY ?genreLabel
+LIMIT {{limit}}
+OFFSET {{offset}}
