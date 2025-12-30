@@ -127,6 +127,36 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'wikidata' => [
+            'driver' => 'stack',
+            'channels' => ['wikidata-genres', 'wikidata-artists', 'wikidata-sync'],
+            'ignore_exceptions' => false,
+        ],
+
+        'wikidata-genres' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/wikidata-seed-genres.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_DAILY_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'wikidata-artists' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/wikidata-seed-artists.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_DAILY_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'wikidata-sync' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/wikidata-sync.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_DAILY_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

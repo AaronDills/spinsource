@@ -1,65 +1,92 @@
-# Spin Source – Custom Project Files
+# SpinSource
 
-This folder contains **only** the custom implementation we designed together, arranged in a Laravel project structure.
+A Laravel application for aggregating and managing music metadata from Wikidata. SpinSource fetches artist, album, and genre information via SPARQL queries and stores it in a relational database for use in music discovery and rating applications.
 
-## What’s included
-- Wikidata config: `config/wikidata.php`
-- SPARQL templates: `resources/sparql/`
-- SPARQL loader: `app/Support/Sparql.php`
-- Seed commands:
-  - `php artisan wikidata:seed-genres`
-  - `php artisan wikidata:sync`
-- Eloquent models for:
-  - Country, Genre, Artist, Album, ArtistLink, UserAlbumRating
-- Migrations for core tables and pivots
+## Architecture Overview
 
-## How to use
-1) Create a fresh Laravel app:
-```bash
-composer create-project laravel/laravel spinsource
-cd spinsource
+### Core Components
+
+**Data Layer**
+- **Eloquent Models**: `Artist`, `Album`, `Genre`, `Country`, `ArtistLink`, `UserAlbumRating`
+- **Relationships**: Artists belong to countries and have many albums, links, and genres (via pivot table)
+- **Migrations**: Located in `database/migrations/` for all core tables and pivot relationships
+
+**Wikidata Integration**
+- **SPARQL Templates**: Parameterized query templates in `resources/sparql/` (`genres.sparql`, `artist_ids.sparql`, `artist_enrich.sparql`)
+- **Template Loader**: `App\Support\Sparql` handles loading and variable substitution in SPARQL templates
+- **Configuration**: `config/wikidata.php` stores endpoint URL and user agent settings
+
+**Job-Based Data Seeding**
+- **Queue Jobs**: `WikidataSeedGenres`, `WikidataSeedArtistIds`, `WikidataEnrichArtists` handle paginated data fetching
+- **Self-Dispatching**: Jobs automatically dispatch the next page when results indicate more data exists
+- **Retry Logic**: Built-in exponential backoff for handling Wikidata query service rate limits
+- **Laravel Horizon**: Manages queue workers for background job processing
+
+**Console Commands**
+- `php artisan wikidata:dispatch-seed-genres` – Dispatches genre seeding jobs
+- `php artisan wikidata:dispatch-seed-artists` – Dispatches artist seeding jobs
+- `php artisan wikidata:sync` – Orchestrates sync operations
+
+### Data Flow
+
+```
+Wikidata SPARQL Endpoint
+         ↓
+   SPARQL Templates (resources/sparql/)
+         ↓
+   Queue Jobs (app/Jobs/Wikidata*.php)
+         ↓
+   Eloquent Models → MySQL/PostgreSQL
 ```
 
-2) Copy these files into your Laravel app root (merge directories).
+## Installation
 
-3) Add env vars:
+1. Clone the repository and install dependencies:
+```bash
+git clone <repository-url> spinsource
+cd spinsource
+composer install
+```
+
+2. Configure environment variables:
 ```env
 WIKIDATA_USER_AGENT="SpinSource/1.0 (you@example.com)"
 WIKIDATA_SPARQL_ENDPOINT="https://query.wikidata.org/sparql"
 ```
 
-4) Run migrations:
+3. Run migrations:
 ```bash
 php artisan migrate
 ```
 
-5) Dry-run seeding:
+4. Start Horizon for queue processing:
 ```bash
-php artisan wikidata:seed-genres --limit=25 --dry-run
+php artisan horizon
 ```
 
-6) Seed:
+5. Seed data from Wikidata:
 ```bash
-php artisan wikidata:seed-genres
-php artisan wikidata:sync
+php artisan wikidata:dispatch-seed-genres
+php artisan wikidata:dispatch-seed-artists
 ```
 
-## Scheduling (nightly)
-Add to `app/Console/Kernel.php`:
+## Scheduling
 
-```php
-protected function schedule(\Illuminate\Console\Scheduling\Schedule $schedule): void
-{
-    $schedule->command('wikidata:sync')
-        ->dailyAt('02:00')
-        ->onOneServer()
-        ->withoutOverlapping();
-}
+The scheduler is configured in `routes/console.php`:
+
+| Command | Schedule | Description |
+|---------|----------|-------------|
+| `wikidata:dispatch-seed-genres` | 3:00 AM | Seed genres from Wikidata |
+| `wikidata:dispatch-seed-artists` | 3:30 AM | Seed artists from Wikidata |
+| `wikidata:sync` | 8:00 PM | Orchestrate sync operations |
+
+To run the scheduler, add this cron entry:
+
+```bash
+* * * * * cd /path-to-project && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-## Notes / Next steps
-- `wikidata:sync` currently runs only the genre seeder.
-- Next commands to implement:
-  - `wikidata:seed-artists` (with websites, social allowlist, image/logo commons files)
-  - `wikidata:seed-albums`
-- External link policy is enforced in the upcoming artist seeder (allowlisted platforms, subreddit-only Reddit).
+## Roadmap
+
+- Album seeding from Wikidata
+- External link policy enforcement (allowlisted platforms, subreddit-only Reddit links)
