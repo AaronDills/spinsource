@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Dependencies (will be installed in container)
+/vendor
+/node_modules
+
+# Laravel
+.env
+.env.local
+.env.*.local
+storage/*.key
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+
+# Testing
+/coverage
+.phpunit.result.cache
+phpunit.xml
+
+# Build artifacts
+/public/build
+/public/hot
+/public/storage
+
+# Documentation
+*.md
+!README.md
+LICENSE
+
+# Misc
+.DS_Store
+Thumbs.db
+npm-debug.log
+yarn-error.log
