@@ -84,7 +84,7 @@ class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
         // Use an aggregated SPARQL template if you adopt it:
         // resources/sparql/albums_agg.sparql
         // If you keep your existing template name "albums", this will still work.
-        $sparql = Sparql::load('albums_agg', [
+        $sparql = Sparql::load('albums', [
             'values' => $values,
         ]);
 
