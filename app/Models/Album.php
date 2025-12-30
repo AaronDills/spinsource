@@ -45,7 +45,6 @@ class Album extends Model
     public function toSearchableArray(): array
     {
         return [
-            'id' => $this->id,
             'title' => $this->title,
             'description' => $this->description,
             'release_year' => $this->release_year,

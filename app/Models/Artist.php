@@ -51,7 +51,6 @@ class Artist extends Model
     public function toSearchableArray(): array
     {
         return [
-            'id' => $this->id,
             'name' => $this->name,
             'sort_name' => $this->sort_name,
             'description' => $this->description,
