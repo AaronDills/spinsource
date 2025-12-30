@@ -1,0 +1,73 @@
+SELECT DISTINCT
+  ?artist
+  ?artistLabel
+  ?artistDescription
+
+  ?instanceOf
+
+  ?country ?countryLabel
+  ?officialWebsite
+  ?wikipediaUrl
+
+  ?imageCommons
+  ?logoCommons
+  ?commonsCategory
+
+  ?formed
+  ?disbanded
+
+  ?musicBrainzId
+  ?genre
+
+  ?givenName
+  ?familyName
+
+  ?twitter
+  ?instagram
+  ?facebook
+  ?youtubeChannel
+  ?spotifyArtistId
+  ?appleMusicArtistId
+  ?deezerArtistId
+  ?soundcloudId
+  ?bandcampId
+  ?subreddit
+WHERE {
+  VALUES ?artist { {{values}} }
+
+  OPTIONAL { ?artist wdt:P31 ?instanceOf . }
+
+  OPTIONAL { ?artist wdt:P17 ?country . }
+  OPTIONAL { ?artist wdt:P856 ?officialWebsite . }
+
+  OPTIONAL { ?artist wdt:P18 ?imageCommons . }
+  OPTIONAL { ?artist wdt:P154 ?logoCommons . }
+  OPTIONAL { ?artist wdt:P373 ?commonsCategory . }
+
+  OPTIONAL { ?artist wdt:P571 ?formed . }
+  OPTIONAL { ?artist wdt:P576 ?disbanded . }
+
+  OPTIONAL { ?artist wdt:P434 ?musicBrainzId . }
+  OPTIONAL { ?artist wdt:P136 ?genre . }
+
+  OPTIONAL { ?artist wdt:P735 ?givenName . }
+  OPTIONAL { ?artist wdt:P734 ?familyName . }
+
+  OPTIONAL { ?artist wdt:P2002 ?twitter . }
+  OPTIONAL { ?artist wdt:P2003 ?instagram . }
+  OPTIONAL { ?artist wdt:P2013 ?facebook . }
+  OPTIONAL { ?artist wdt:P2397 ?youtubeChannel . }
+  OPTIONAL { ?artist wdt:P1902 ?spotifyArtistId . }
+  OPTIONAL { ?artist wdt:P2850 ?appleMusicArtistId . }
+  OPTIONAL { ?artist wdt:P2722 ?deezerArtistId . }
+  OPTIONAL { ?artist wdt:P3040 ?soundcloudId . }
+  OPTIONAL { ?artist wdt:P3283 ?bandcampId . }
+  OPTIONAL { ?artist wdt:P3984 ?subreddit . }
+
+  OPTIONAL {
+    ?wikipediaUrl schema:about ?artist ;
+                  schema:isPartOf <https://en.wikipedia.org/> .
+  }
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}

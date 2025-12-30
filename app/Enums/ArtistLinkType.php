@@ -28,9 +28,11 @@ enum ArtistLinkType: string
             'P2003' => self::INSTAGRAM,
             'P2013' => self::FACEBOOK,
             'P2397' => self::YOUTUBE,
+            'P2850' => self::APPLE_MUSIC,
             'P1902' => self::SPOTIFY,
             'P3283' => self::BANDCAMP,
             'P3040' => self::SOUNDCLOUD,
+            'P3984' => self::REDDIT,
             default => null,
         };
     }

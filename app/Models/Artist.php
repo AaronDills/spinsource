@@ -30,18 +30,20 @@ class Artist extends Model
         return $this->belongsTo(Country::class);
     }
 
-    public function genres(): BelongsToMany
+    public function genres()
     {
-        return $this->belongsToMany(Genre::class);
+        return $this->belongsToMany(\App\Models\Genre::class, 'artist_genre')->withTimestamps();
     }
+    
+    public function links()
+    {
+        return $this->hasMany(\App\Models\ArtistLink::class);
+    }
+    
 
     public function albums(): HasMany
     {
         return $this->hasMany(Album::class);
     }
 
-    public function links(): HasMany
-    {
-        return $this->hasMany(ArtistLink::class);
-    }
 }

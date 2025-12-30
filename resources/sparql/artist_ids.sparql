@@ -1,0 +1,15 @@
+SELECT DISTINCT ?artist WHERE {
+  {
+    # Solo artists: humans with occupation musician
+    ?artist wdt:P31/wdt:P279* wd:Q5 ;
+            wdt:P106/wdt:P279* wd:Q639669 .
+  }
+  UNION
+  {
+    # Bands / groups
+    ?artist wdt:P31/wdt:P279* wd:Q215380 .
+  }
+}
+ORDER BY ?artist
+LIMIT {{limit}}
+OFFSET {{offset}}
