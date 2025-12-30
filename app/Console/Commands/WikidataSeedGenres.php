@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class WikidataSeedGenres extends Command
 {
@@ -32,10 +33,11 @@ class WikidataSeedGenres extends Command
 
         $totalProcessed = 0;
 
-        $this->info(
-            "Seeding genres from Wikidata (pageSize={$pageSize}, offset={$offset}, dryRun=" .
-            ($dryRun ? 'yes' : 'no') . ')'
-        );
+        Log::info("Seeding genres from Wikidata", [
+            'pageSize' => $pageSize,
+            'offset' => $offset,
+            'dryRun' => $dryRun,
+        ]);
 
         while (true) {
             // Respect overall --limit
@@ -76,23 +78,20 @@ class WikidataSeedGenres extends Command
                     ->throw();
             } catch (RequestException $e) {
                 $status = optional($e->response)->status();
+                $throttling = in_array($status, [429, 503], true);
 
-                $this->error('Wikidata request failed.');
-                if ($status) {
-                    $this->line("HTTP status: {$status}");
-                }
-                $this->line($e->getMessage());
-
-                if (in_array($status, [429, 503], true)) {
-                    $this->warn('Wikidata Query Service may be throttling or under load. Try a smaller --page-size.');
-                }
+                Log::error('Wikidata request failed', [
+                    'status' => $status,
+                    'message' => $e->getMessage(),
+                    'throttling' => $throttling,
+                ]);
 
                 return self::FAILURE;
             }
 
             $bindings = $response->json('results.bindings', []);
             if (count($bindings) === 0) {
-                $this->info('No more results. Done.');
+                Log::info('No more results. Done.');
                 break;
             }
 
@@ -138,7 +137,7 @@ class WikidataSeedGenres extends Command
                 ], static fn ($v) => $v !== null);
 
                 if ($dryRun) {
-                    $this->line("DRY: upsert genre {$genreQid} ({$name})");
+                    Log::debug("DRY: upsert genre", ['qid' => $genreQid, 'name' => $name]);
                 } else {
                     Genre::updateOrCreate(
                         ['wikidata_id' => $genreQid],
@@ -154,11 +153,11 @@ class WikidataSeedGenres extends Command
                 $this->resolveParents($pendingParents);
             }
 
-            $this->info(
-                "Processed page offset={$offset} count=" .
-                count($bindings) .
-                " (totalProcessed={$totalProcessed})"
-            );
+            Log::info("Processed page", [
+                'offset' => $offset,
+                'count' => count($bindings),
+                'totalProcessed' => $totalProcessed,
+            ]);
 
             $offset += $currentPageSize;
 
@@ -166,7 +165,7 @@ class WikidataSeedGenres extends Command
             usleep(250_000);
         }
 
-        $this->info("Finished. Total processed: {$totalProcessed}");
+        Log::info("Finished seeding genres", ['totalProcessed' => $totalProcessed]);
         return self::SUCCESS;
     }
 
