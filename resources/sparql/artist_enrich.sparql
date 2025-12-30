@@ -1,46 +1,53 @@
-SELECT DISTINCT
+SELECT
   ?artist
-  ?artistLabel
-  ?artistDescription
+  (SAMPLE(?artistLabel) AS ?artistLabel)
+  (SAMPLE(?artistDescription) AS ?artistDescription)
 
-  ?instanceOf
+  # Multi-valued: join them so you can parse once per artist
+  (GROUP_CONCAT(DISTINCT STR(?instanceOf); SEPARATOR="|") AS ?instanceOf)
+  (GROUP_CONCAT(DISTINCT STR(?genre); SEPARATOR="|") AS ?genre)
 
-  ?country ?countryLabel
-  ?officialWebsite
-  ?wikipediaUrl
+  (SAMPLE(?country) AS ?country)
+  (SAMPLE(?countryLabel) AS ?countryLabel)
 
-  ?imageCommons
-  ?logoCommons
-  ?commonsCategory
+  (SAMPLE(?officialWebsite) AS ?officialWebsite)
+  (SAMPLE(?wikipediaUrl) AS ?wikipediaUrl)
 
-  ?formed
-  ?disbanded
+  (SAMPLE(?imageCommons) AS ?imageCommons)
+  (SAMPLE(?logoCommons) AS ?logoCommons)
+  (SAMPLE(?commonsCategory) AS ?commonsCategory)
 
-  ?musicBrainzId
-  ?genre
+  (SAMPLE(?formed) AS ?formed)
+  (SAMPLE(?disbanded) AS ?disbanded)
 
-  ?givenName
-  ?familyName
+  (SAMPLE(?musicBrainzId) AS ?musicBrainzId)
 
-  ?twitter
-  ?instagram
-  ?facebook
-  ?youtubeChannel
-  ?spotifyArtistId
-  ?appleMusicArtistId
-  ?deezerArtistId
-  ?soundcloudId
-  ?bandcampId
-  ?subreddit
+  (SAMPLE(?givenNameLabel) AS ?givenNameLabel)
+  (SAMPLE(?familyNameLabel) AS ?familyNameLabel)
+
+  (SAMPLE(?twitter) AS ?twitter)
+  (SAMPLE(?instagram) AS ?instagram)
+  (SAMPLE(?facebook) AS ?facebook)
+  (SAMPLE(?youtubeChannel) AS ?youtubeChannel)
+  (SAMPLE(?spotifyArtistId) AS ?spotifyArtistId)
+  (SAMPLE(?appleMusicArtistId) AS ?appleMusicArtistId)
+  (SAMPLE(?deezerArtistId) AS ?deezerArtistId)
+  (SAMPLE(?soundcloudId) AS ?soundcloudId)
+  (SAMPLE(?bandcampId) AS ?bandcampId)
+  (SAMPLE(?subreddit) AS ?subreddit)
 WHERE {
   VALUES ?artist { {{values}} }
 
   OPTIONAL { ?artist wdt:P31 ?instanceOf . }
 
-  OPTIONAL { ?artist wdt:P17 ?country . }
+  # Country: origin for groups, citizenship for people; coalesce
+  OPTIONAL { ?artist wdt:P495 ?countryOrigin . }
+  OPTIONAL { ?artist wdt:P27  ?countryCitizen . }
+  BIND(COALESCE(?countryOrigin, ?countryCitizen) AS ?country)
+
   OPTIONAL { ?artist wdt:P856 ?officialWebsite . }
 
-  OPTIONAL { ?artist wdt:P18 ?imageCommons . }
+  OPTIONAL { ?artist wdt:P18  ?imageCommons . }
   OPTIONAL { ?artist wdt:P154 ?logoCommons . }
   OPTIONAL { ?artist wdt:P373 ?commonsCategory . }
 
@@ -71,3 +78,4 @@ WHERE {
 
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
+GROUP BY ?artist
