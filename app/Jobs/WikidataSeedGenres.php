@@ -58,7 +58,7 @@ class WikidataSeedGenres implements ShouldQueue, ShouldBeUnique
             $afterFilter = "FILTER(?genre > wd:{$this->afterQid})";
         }
 
-        $sparql = Sparql::load('genres_cursor', [
+        $sparql = Sparql::load('genres', [
             'limit'        => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);
