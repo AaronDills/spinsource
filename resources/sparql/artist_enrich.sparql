@@ -1,14 +1,14 @@
 SELECT
   ?artist
-  (SAMPLE(?artistLabel) AS ?artistLabel)
-  (SAMPLE(?artistDescription) AS ?artistDescription)
+  (SAMPLE(?artistLabelRaw) AS ?artistLabel)
+  (SAMPLE(?artistDescriptionRaw) AS ?artistDescription)
 
   # Multi-valued: join them so you can parse once per artist
   (GROUP_CONCAT(DISTINCT STR(?instanceOf); SEPARATOR="|") AS ?instanceOf)
   (GROUP_CONCAT(DISTINCT STR(?genre); SEPARATOR="|") AS ?genre)
 
   (SAMPLE(?country) AS ?country)
-  (SAMPLE(?countryLabel) AS ?countryLabel)
+  (SAMPLE(?countryLabelRaw) AS ?countryLabel)
 
   (SAMPLE(?officialWebsite) AS ?officialWebsite)
   (SAMPLE(?wikipediaUrl) AS ?wikipediaUrl)
@@ -22,8 +22,8 @@ SELECT
 
   (SAMPLE(?musicBrainzId) AS ?musicBrainzId)
 
-  (SAMPLE(?givenNameLabel) AS ?givenNameLabel)
-  (SAMPLE(?familyNameLabel) AS ?familyNameLabel)
+  (SAMPLE(?givenNameLabelRaw) AS ?givenNameLabel)
+  (SAMPLE(?familyNameLabelRaw) AS ?familyNameLabel)
 
   (SAMPLE(?twitter) AS ?twitter)
   (SAMPLE(?instagram) AS ?instagram)
@@ -38,12 +38,17 @@ SELECT
 WHERE {
   VALUES ?artist { {{values}} }
 
+  # Explicit label/description fetching (wikibase:label doesn't work reliably with GROUP BY)
+  OPTIONAL { ?artist rdfs:label ?artistLabelRaw . FILTER(LANG(?artistLabelRaw) = "en") }
+  OPTIONAL { ?artist schema:description ?artistDescriptionRaw . FILTER(LANG(?artistDescriptionRaw) = "en") }
+
   OPTIONAL { ?artist wdt:P31 ?instanceOf . }
 
   # Country: origin for groups, citizenship for people; coalesce
   OPTIONAL { ?artist wdt:P495 ?countryOrigin . }
   OPTIONAL { ?artist wdt:P27  ?countryCitizen . }
   BIND(COALESCE(?countryOrigin, ?countryCitizen) AS ?country)
+  OPTIONAL { ?country rdfs:label ?countryLabelRaw . FILTER(LANG(?countryLabelRaw) = "en") }
 
   OPTIONAL { ?artist wdt:P856 ?officialWebsite . }
 
@@ -57,8 +62,14 @@ WHERE {
   OPTIONAL { ?artist wdt:P434 ?musicBrainzId . }
   OPTIONAL { ?artist wdt:P136 ?genre . }
 
-  OPTIONAL { ?artist wdt:P735 ?givenName . }
-  OPTIONAL { ?artist wdt:P734 ?familyName . }
+  OPTIONAL {
+    ?artist wdt:P735 ?givenName .
+    ?givenName rdfs:label ?givenNameLabelRaw . FILTER(LANG(?givenNameLabelRaw) = "en")
+  }
+  OPTIONAL {
+    ?artist wdt:P734 ?familyName .
+    ?familyName rdfs:label ?familyNameLabelRaw . FILTER(LANG(?familyNameLabelRaw) = "en")
+  }
 
   OPTIONAL { ?artist wdt:P2002 ?twitter . }
   OPTIONAL { ?artist wdt:P2003 ?instagram . }
@@ -75,7 +86,5 @@ WHERE {
     ?wikipediaUrl schema:about ?artist ;
                   schema:isPartOf <https://en.wikipedia.org/> .
   }
-
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 GROUP BY ?artist
