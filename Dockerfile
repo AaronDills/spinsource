@@ -80,7 +80,9 @@ COPY package.json package-lock.json* ./
 
 RUN npm ci
 
+# Copy all files needed for Vite/Tailwind build
 COPY resources ./resources
+COPY public ./public
 COPY vite.config.js ./
 COPY tailwind.config.js* ./
 COPY postcss.config.js* ./
@@ -113,6 +115,9 @@ RUN composer install \
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 storage bootstrap/cache
 
+# Create supervisor log directory
+RUN mkdir -p /var/log/supervisor
+
 # Copy development configurations
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
 COPY docker/supervisor/supervisord.dev.conf /etc/supervisord.conf
@@ -143,6 +148,9 @@ RUN chown -R www-data:www-data /var/www/html \
 RUN php artisan config:cache \
     && php artisan route:cache \
     && php artisan view:cache
+
+# Create supervisor log directory
+RUN mkdir -p /var/log/supervisor
 
 # Copy production configurations
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
