@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Scout\Searchable;
 
 class Artist extends Model
 {
+    use Searchable;
     protected $fillable = [
         'name',
         'sort_name',
@@ -46,4 +48,13 @@ class Artist extends Model
         return $this->hasMany(Album::class);
     }
 
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'sort_name' => $this->sort_name,
+            'description' => $this->description,
+        ];
+    }
 }

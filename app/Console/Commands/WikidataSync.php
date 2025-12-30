@@ -24,11 +24,8 @@ class WikidataSync extends Command
             $this->info('Starting Wikidata sync...');
 
             $steps = [
-                // Countries are created on-demand by other seeders; a dedicated pass is optional.
-                'wikidata:seed-genres',
-                // Next steps (to be added as we implement them):
-                // 'wikidata:seed-artists',
-                // 'wikidata:seed-albums',
+                'wikidata:dispatch-seed-genres',
+                'wikidata:dispatch-seed-artists'
             ];
 
             foreach ($steps as $cmd) {

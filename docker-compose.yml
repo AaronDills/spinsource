@@ -30,11 +30,18 @@ services:
       - REDIS_PORT=6379
       - QUEUE_CONNECTION=redis
       - SESSION_DRIVER=redis
+      - SCOUT_DRIVER=typesense
+      - TYPESENSE_HOST=typesense
+      - TYPESENSE_PORT=8108
+      - TYPESENSE_PROTOCOL=http
+      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-xyz}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
+      typesense:
+        condition: service_healthy
     networks:
       - spinsource
 
@@ -95,6 +102,28 @@ services:
     networks:
       - spinsource
 
+  # ==========================================================================
+  # Typesense Search Engine (Development)
+  # ==========================================================================
+  typesense:
+    image: typesense/typesense:27.1
+    container_name: spinsource-typesense
+    restart: unless-stopped
+    ports:
+      - "8108:8108"
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-xyz}
+      TYPESENSE_DATA_DIR: /data
+    volumes:
+      - typesense-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - spinsource
+
 # =============================================================================
 # Networks
 # =============================================================================
@@ -108,3 +137,4 @@ networks:
 volumes:
   db-data:
   redis-data:
+  typesense-data:

@@ -5,9 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Scout\Searchable;
 
 class Album extends Model
 {
+    use Searchable;
     protected $fillable = [
         'title',
         'wikidata_id',
@@ -38,5 +40,16 @@ class Album extends Model
     public function ratings(): HasMany
     {
         return $this->hasMany(UserAlbumRating::class);
+    }
+
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'title' => $this->title,
+            'description' => $this->description,
+            'release_year' => $this->release_year,
+            'artist_name' => $this->artist?->name,
+        ];
     }
 }
