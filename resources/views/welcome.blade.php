@@ -8,21 +8,9 @@
     </head>
     <body class="bg-gray-100 dark:bg-gray-900 min-h-screen flex items-center justify-center">
         <div class="text-center">
-            @auth
-                <a
-                    href="{{ url('/dashboard') }}"
-                    class="inline-flex items-center px-6 py-3 bg-gray-800 dark:bg-gray-200 border border-transparent rounded-md font-semibold text-white dark:text-gray-800 hover:bg-gray-700 dark:hover:bg-white transition"
-                >
-                    Dashboard
-                </a>
-            @else
-                <a
-                    href="{{ route('login') }}"
-                    class="inline-flex items-center px-6 py-3 bg-gray-800 dark:bg-gray-200 border border-transparent rounded-md font-semibold text-white dark:text-gray-800 hover:bg-gray-700 dark:hover:bg-white transition"
-                >
-                    Login
-                </a>
-            @endauth
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-200">
+                {{ config('app.name', 'Laravel') }}
+            </h1>
         </div>
     </body>
 </html>
