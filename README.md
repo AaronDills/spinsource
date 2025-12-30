@@ -86,6 +86,49 @@ To run the scheduler, add this cron entry:
 * * * * * cd /path-to-project && php artisan schedule:run >> /dev/null 2>&1
 ```
 
+## Search
+
+SpinSource uses [Typesense](https://typesense.org/) via [Laravel Scout](https://laravel.com/docs/scout) for full-text search.
+
+### Searchable Models
+
+| Model | Indexed Fields | Query Fields |
+|-------|----------------|--------------|
+| `Artist` | `id`, `name`, `sort_name`, `description` | `name`, `sort_name`, `description` |
+| `Album` | `id`, `title`, `description`, `release_year`, `artist_name` | `title`, `artist_name`, `description` |
+
+### Configuration
+
+Add these environment variables:
+
+```env
+SCOUT_DRIVER=typesense
+TYPESENSE_HOST=localhost
+TYPESENSE_PORT=8108
+TYPESENSE_PROTOCOL=http
+TYPESENSE_API_KEY=your-api-key
+```
+
+When using Docker, the app container connects to `typesense` as the host (configured in `docker-compose.yml`).
+
+### Syncing Indexes
+
+Import all records to Typesense:
+
+```bash
+php artisan scout:import "App\Models\Artist"
+php artisan scout:import "App\Models\Album"
+```
+
+Flush and rebuild indexes:
+
+```bash
+php artisan scout:flush "App\Models\Artist"
+php artisan scout:flush "App\Models\Album"
+php artisan scout:import "App\Models\Artist"
+php artisan scout:import "App\Models\Album"
+```
+
 ## Roadmap
 
 - Album seeding from Wikidata
