@@ -3,13 +3,11 @@
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
-// Orchestrate sync operations (daily at midnight)
-Schedule::command('wikidata:sync --page-size=2000 --artist-batch-size=100')
+Schedule::command('wikidata:sync --page-size=2000 --artist-batch-size=100 --album-artist-batch-size=25')
     ->dailyAt('00:00')
     ->onOneServer()
     ->withoutOverlapping();
 
-// Rebuild search indexes daily at noon to keep Typesense in sync.
 Schedule::command('scout:flush', ['App\Models\Artist'])
     ->dailyAt('12:00')
     ->onOneServer()
