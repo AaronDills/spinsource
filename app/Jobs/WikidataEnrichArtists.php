@@ -55,7 +55,7 @@ class WikidataEnrichArtists implements ShouldQueue
 
         // Uses the aggregated one-row-per-artist SPARQL:
         // resources/sparql/artist_enrich_agg.sparql
-        $sparql = Sparql::load('artist_enrich_agg', [
+        $sparql = Sparql::load('artist_enrich', [
             'values' => $values,
         ]);
 
