@@ -1,22 +1,24 @@
-SELECT DISTINCT
+SELECT
   ?album
-  ?albumLabel
-  ?albumDescription
-  ?artist
-  ?albumType
-  ?publicationDate
-  ?musicBrainzReleaseGroupId
-  ?wikipediaUrl
+  (SAMPLE(?albumLabel) AS ?albumLabel)
+  (SAMPLE(?albumDescription) AS ?albumDescription)
+
+  # Multi-valued performers
+  (GROUP_CONCAT(DISTINCT STR(?performer); SEPARATOR="|") AS ?artists)
+
+  (SAMPLE(?albumType) AS ?albumType)
+  (SAMPLE(?publicationDate) AS ?publicationDate)
+  (SAMPLE(?musicBrainzReleaseGroupId) AS ?musicBrainzReleaseGroupId)
+  (SAMPLE(?wikipediaUrl) AS ?wikipediaUrl)
 WHERE {
-  VALUES ?artist { {{values}} }
+  VALUES ?performer { {{values}} }
 
-  ?album wdt:P175 ?artist .
-  ?album wdt:P31 ?albumType .
+  ?album wdt:P175 ?performer ;
+        wdt:P31  ?albumType .
 
-  # Filter to relevant album types
   VALUES ?albumType {
     wd:Q482994    # studio album
-    wd:Q169930    # EP (extended play)
+    wd:Q169930    # EP
     wd:Q134556    # single
     wd:Q222910    # compilation album
     wd:Q209939    # live album
@@ -34,3 +36,5 @@ WHERE {
 
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
+GROUP BY ?album
+ORDER BY ?album
