@@ -52,7 +52,7 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
             $afterFilter = "FILTER(?artist > wd:{$this->afterQid})";
         }
 
-        $sparql = Sparql::load('artist_ids_cursor', [
+        $sparql = Sparql::load('artist_ids', [
             'limit'        => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);
