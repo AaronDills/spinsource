@@ -8,13 +8,13 @@ use Illuminate\Support\Facades\Schedule;
 | Wikidata Sync Schedule
 |--------------------------------------------------------------------------
 |
-| Dispatch jobs seed data from Wikidata in the early morning hours.
-| The sync job runs in the evening to orchestrate any additional operations.
+| Dispatch jobs to seed data from Wikidata during early morning hours.
+| Note: wikidata:sync dispatches queued jobs that may run beyond the command itself.
 |
 */
 
-// Orchestrate sync operations (daily at 8:00 PM)
-Schedule::command('wikidata:sync')
+// Orchestrate sync operations (daily at midnight)
+Schedule::command('wikidata:sync --page-size=500')
     ->dailyAt('00:00')
     ->onOneServer()
     ->withoutOverlapping();
