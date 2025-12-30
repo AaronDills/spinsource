@@ -26,15 +26,21 @@ class WikidataSeedGenres implements ShouldQueue, ShouldBeUnique
     // Backoff schedule (seconds) for transient WDQS issues
     public array $backoff = [5, 15, 45, 120, 300];
 
+    /**
+     * Cursor pagination:
+     * - null = start from beginning
+     * - Q#### = fetch items with QID > afterQid
+     */
     public function __construct(
-        public int $offset,
-        public int $pageSize = 100
+        public ?string $afterQid = null,
+        public int $pageSize = 500
     ) {}
 
     public function uniqueId(): string
     {
         // Prevent accidental duplicate page processing
-        return "wikidata:genres:offset:{$this->offset}:size:{$this->pageSize}";
+        $cursor = $this->afterQid ?? 'START';
+        return "wikidata:genres:after:{$cursor}:size:{$this->pageSize}";
     }
 
     public function handle(): void
@@ -43,13 +49,18 @@ class WikidataSeedGenres implements ShouldQueue, ShouldBeUnique
         $ua = config('wikidata.user_agent');
 
         Log::info('Wikidata genre seed page start', [
-            'offset' => $this->offset,
-            'pageSize' => $this->pageSize,
+            'afterQid'  => $this->afterQid,
+            'pageSize'  => $this->pageSize,
         ]);
 
-        $sparql = Sparql::load('genres', [
-            'limit'  => $this->pageSize,
-            'offset' => $this->offset,
+        $afterFilter = '';
+        if ($this->afterQid && preg_match('/^Q\d+$/', $this->afterQid)) {
+            $afterFilter = "FILTER(?genre > wd:{$this->afterQid})";
+        }
+
+        $sparql = Sparql::load('genres_cursor', [
+            'limit'        => $this->pageSize,
+            'after_filter' => $afterFilter,
         ]);
 
         try {
@@ -71,13 +82,12 @@ class WikidataSeedGenres implements ShouldQueue, ShouldBeUnique
         } catch (RequestException $e) {
             $status = optional($e->response)->status();
             Log::warning('Wikidata genre seed request failed', [
-                'offset' => $this->offset,
+                'afterQid' => $this->afterQid,
                 'pageSize' => $this->pageSize,
-                'status' => $status,
-                'message' => $e->getMessage(),
+                'status'   => $status,
+                'message'  => $e->getMessage(),
             ]);
 
-            // Re-throw so the job is marked failed and retried according to $tries/$backoff
             throw $e;
         }
 
@@ -86,7 +96,7 @@ class WikidataSeedGenres implements ShouldQueue, ShouldBeUnique
 
         if ($count === 0) {
             Log::info('Wikidata genre seed completed (no more results)', [
-                'offset' => $this->offset,
+                'afterQid' => $this->afterQid,
                 'pageSize' => $this->pageSize,
             ]);
             return;
@@ -120,38 +130,46 @@ class WikidataSeedGenres implements ShouldQueue, ShouldBeUnique
                 $pendingParents[$genreQid] = $parentQid;
             }
 
-            $payload = array_filter([
-                'name'           => $name,
-                'description'    => $description,
-                'musicbrainz_id' => $mbid,
+            // Keep name nullable handling explicit (optional but clearer than array_filter magic)
+            $payload = [
+                'name'           => $name ?: null,
+                'description'    => $description ?: null,
+                'musicbrainz_id' => $mbid ?: null,
                 'inception_year' => $inception,
                 'country_id'     => $countryId,
-            ], static fn ($v) => $v !== null);
+            ];
 
-            Genre::updateOrCreate(['wikidata_id' => $genreQid], $payload);
+            Genre::updateOrCreate(['wikidata_id' => $genreQid], array_filter(
+                $payload,
+                static fn ($v) => $v !== null
+            ));
         }
 
-        if (count($pendingParents) > 0) {
+        if (!empty($pendingParents)) {
             $this->resolveParents($pendingParents);
         }
 
+        // Cursor for next page = last item in this page
+        $lastGenreUrl = data_get($bindings[$count - 1], 'genre.value');
+        $nextAfterQid = $this->qidFromEntityUrl($lastGenreUrl);
+
         Log::info('Wikidata genre seed page done', [
-            'offset' => $this->offset,
-            'pageSize' => $this->pageSize,
-            'count' => $count,
+            'afterQid'     => $this->afterQid,
+            'pageSize'     => $this->pageSize,
+            'count'        => $count,
+            'nextAfterQid' => $nextAfterQid,
         ]);
 
-        // If we got a full page, likely more results exist. Enqueue next page.
-        if ($count === $this->pageSize) {
-            // Gentle throttle between pages (queue-friendly; doesn’t block worker too long)
+        // If we got a full page and have a cursor, enqueue next page
+        if ($count === $this->pageSize && $nextAfterQid) {
             usleep(250_000);
 
-            self::dispatch($this->offset + $this->pageSize, $this->pageSize)
+            self::dispatch($nextAfterQid, $this->pageSize)
                 ->onQueue($this->queue ?? 'default');
 
             Log::info('Enqueued next Wikidata genre seed page', [
-                'nextOffset' => $this->offset + $this->pageSize,
-                'pageSize' => $this->pageSize,
+                'nextAfterQid' => $nextAfterQid,
+                'pageSize'     => $this->pageSize,
             ]);
         }
     }
