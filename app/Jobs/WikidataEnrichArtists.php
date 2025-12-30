@@ -37,8 +37,14 @@ class WikidataEnrichArtists implements ShouldQueue
         $endpoint = config('wikidata.endpoint');
         $ua = config('wikidata.user_agent');
 
-        $artistQids = array_values(array_unique(array_filter($this->artistQids, fn ($q) => is_string($q) && preg_match('/^Q\d+$/', $q))));
-        if (count($artistQids) === 0) return;
+        $artistQids = array_values(array_unique(array_filter(
+            $this->artistQids,
+            fn ($q) => is_string($q) && preg_match('/^Q\d+$/', $q)
+        )));
+
+        if (count($artistQids) === 0) {
+            return;
+        }
 
         Log::info('Wikidata artist enrich batch start', [
             'count'  => count($artistQids),
@@ -47,6 +53,8 @@ class WikidataEnrichArtists implements ShouldQueue
 
         $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $artistQids));
 
+        // Uses the aggregated one-row-per-artist SPARQL:
+        // resources/sparql/artist_enrich_agg.sparql
         $sparql = Sparql::load('artist_enrich_agg', [
             'values' => $values,
         ]);
@@ -84,38 +92,36 @@ class WikidataEnrichArtists implements ShouldQueue
             return;
         }
 
-        // 1 row per artist (because SPARQL is GROUPed)
         $now = now();
 
-        $countriesToUpsert = [];      // [qid => name]
-        $artistRows = [];             // rows for Artist::upsert
-        $artistMeta = [];             // [wikidata_id => ['genreQids'=>[], 'links'=>[]]]
+        // Bulk staging
+        $countriesToUpsert = [];   // [countryQid => countryName]
+        $artistRows = [];          // for Artist::upsert
+        $artistMeta = [];          // [artistQid => ['genreQids'=>[], 'links'=>[], 'countryQid'=>?string]]
         $allGenreQids = [];
 
         foreach ($bindings as $row) {
-            $artistUrl = data_get($row, 'artist.value');
-            $qid = $this->qidFromEntityUrl($artistUrl);
+            $qid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
             if (! $qid) continue;
 
-            $name = data_get($row, 'artistLabel.value');
-            // name is required in schema; fallback to QID if label missing
-            $name = $name ?: $qid;
+            $name = data_get($row, 'artistLabel.value') ?: $qid; // name is required in schema
 
+            // Determine type: person if instanceOf includes Q5 (human), else group
             $instanceOfStr = (string) data_get($row, 'instanceOf.value', '');
             $instanceOfUrls = $instanceOfStr !== '' ? explode('|', $instanceOfStr) : [];
             $artistType = in_array('http://www.wikidata.org/entity/Q5', $instanceOfUrls, true) ? 'person' : 'group';
 
-            $countryQid = $this->qidFromEntityUrl(data_get($row, 'country.value'));
+            $countryQid  = $this->qidFromEntityUrl(data_get($row, 'country.value'));
             $countryName = data_get($row, 'countryLabel.value');
 
             if ($countryQid && $countryName) {
                 $countriesToUpsert[$countryQid] = $countryName;
             }
 
-            $formedYear = $this->extractYear(data_get($row, 'formed.value'));
+            $formedYear    = $this->extractYear(data_get($row, 'formed.value'));
             $disbandedYear = $this->extractYear(data_get($row, 'disbanded.value'));
 
-            $given = data_get($row, 'givenNameLabel.value');
+            $given  = data_get($row, 'givenNameLabel.value');
             $family = data_get($row, 'familyNameLabel.value');
             $sortName = $this->computeSortName($name, $given, $family);
 
@@ -142,7 +148,7 @@ class WikidataEnrichArtists implements ShouldQueue
                 'updated_at'       => $now,
             ];
 
-            // Genres (multi-valued string)
+            // Genres: aggregated string of entity URLs separated by "|"
             $genreStr = (string) data_get($row, 'genre.value', '');
             $genreUrls = $genreStr !== '' ? explode('|', $genreStr) : [];
             $genreQids = array_values(array_unique(array_filter(array_map([$this, 'qidFromEntityUrl'], $genreUrls))));
@@ -158,7 +164,7 @@ class WikidataEnrichArtists implements ShouldQueue
             ];
         }
 
-        // Upsert Countries in bulk
+        // Upsert Countries in bulk (by wikidata_id)
         if (!empty($countriesToUpsert)) {
             $countryRows = [];
             foreach ($countriesToUpsert as $qid => $nm) {
@@ -173,16 +179,18 @@ class WikidataEnrichArtists implements ShouldQueue
             Country::upsert($countryRows, ['wikidata_id'], ['name', 'updated_at']);
         }
 
-        $countriesByQid = Country::query()
-            ->whereIn('wikidata_id', array_keys($countriesToUpsert))
-            ->get(['id', 'wikidata_id'])
-            ->keyBy('wikidata_id');
+        $countriesByQid = !empty($countriesToUpsert)
+            ? Country::query()
+                ->whereIn('wikidata_id', array_keys($countriesToUpsert))
+                ->get(['id', 'wikidata_id'])
+                ->keyBy('wikidata_id')
+            : collect();
 
-        // Replace __country_qid with country_id for upsert
+        // Replace __country_qid with country_id for artist upsert
         foreach ($artistRows as &$r) {
             $cq = $r['__country_qid'] ?? null;
             unset($r['__country_qid']);
-            $r['country_id'] = $cq && isset($countriesByQid[$cq]) ? $countriesByQid[$cq]->id : null;
+            $r['country_id'] = $cq && $countriesByQid->has($cq) ? $countriesByQid->get($cq)->id : null;
         }
         unset($r);
 
@@ -214,7 +222,7 @@ class WikidataEnrichArtists implements ShouldQueue
             ->get(['id', 'wikidata_id'])
             ->keyBy('wikidata_id');
 
-        // Genres map
+        // Map genres (only link ones you already have in your genres table)
         $allGenreQids = array_values(array_unique($allGenreQids));
         $genresByQid = !empty($allGenreQids)
             ? Genre::query()->whereIn('wikidata_id', $allGenreQids)->get(['id', 'wikidata_id'])->keyBy('wikidata_id')
@@ -228,32 +236,32 @@ class WikidataEnrichArtists implements ShouldQueue
             $artist = $artistsByQid->get($qid);
             if (! $artist) continue;
 
-            // Pivot rows
+            // Pivot rows (artist_genre)
             foreach ($meta['genreQids'] as $gqid) {
                 $genre = $genresByQid->get($gqid);
                 if (! $genre) continue;
 
                 $pivotRows[] = [
-                    'artist_id'   => $artist->id,
-                    'genre_id'    => $genre->id,
-                    'created_at'  => $now,
-                    'updated_at'  => $now,
+                    'artist_id'  => $artist->id,
+                    'genre_id'   => $genre->id,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ];
             }
 
-            // Link rows
+            // Link rows (artist_links)
             foreach ($meta['links'] as $lnk) {
                 $url = $this->normalizeUrl($lnk['url']);
                 if (! $url) continue;
 
                 $linkRows[] = [
-                    'artist_id'    => $artist->id,
-                    'type'         => $lnk['type'],
-                    'url'          => $url,
-                    'source'       => 'wikidata',
-                    'is_official'  => (bool) $lnk['is_official'],
-                    'created_at'   => $now,
-                    'updated_at'   => $now,
+                    'artist_id'   => $artist->id,
+                    'type'        => $lnk['type'],
+                    'url'         => $url,
+                    'source'      => 'wikidata',
+                    'is_official' => (bool) $lnk['is_official'],
+                    'created_at'  => $now,
+                    'updated_at'  => $now,
                 ];
             }
         }
@@ -270,11 +278,11 @@ class WikidataEnrichArtists implements ShouldQueue
         }
 
         Log::info('Wikidata artist enrich batch done', [
-            'requested'      => count($artistQids),
-            'rows'           => count($bindings),
-            'artistsUpserted'=> count($artistRows),
-            'pivotInserted'  => $pivotInserted,
-            'linksInserted'  => $linksInserted,
+            'requested'       => count($artistQids),
+            'rows'            => count($bindings),
+            'artistsUpserted' => count($artistRows),
+            'pivotInserted'   => $pivotInserted,
+            'linksInserted'   => $linksInserted,
         ]);
     }
 
@@ -317,15 +325,11 @@ class WikidataEnrichArtists implements ShouldQueue
     {
         if (! $value) return null;
 
-        // Sometimes WDQS returns a URL (Special:FilePath/...), sometimes an entity URL. We just want the filename.
-        // Take the last path segment and urldecode it.
         $value = trim($value);
 
-        // If it's like "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg"
         if (str_contains($value, 'Special:FilePath/')) {
             $value = substr($value, strrpos($value, 'Special:FilePath/') + strlen('Special:FilePath/'));
         } else {
-            // Otherwise just use the last segment after '/'
             $slash = strrpos($value, '/');
             if ($slash !== false) $value = substr($value, $slash + 1);
         }
@@ -339,7 +343,7 @@ class WikidataEnrichArtists implements ShouldQueue
         if (! $url) return null;
         $url = trim($url);
         if ($url === '') return null;
-        if (!preg_match('#^https?://#i', $url)) return null;
+        if (! preg_match('#^https?://#i', $url)) return null;
         return $url;
     }
 
@@ -351,48 +355,57 @@ class WikidataEnrichArtists implements ShouldQueue
     {
         $links = [];
 
-        // Official website
-        $official = data_get($row, 'officialWebsite.value');
-        if ($official) {
-            $links[] = ['type' => ArtistLinkType::OFFICIAL_WEBSITE->value, 'url' => $official, 'is_official' => true];
+        // Website (P856)
+        if ($v = data_get($row, 'officialWebsite.value')) {
+            $links[] = ['type' => ArtistLinkType::WEBSITE->value, 'url' => $v, 'is_official' => true];
         }
 
-        // Wikipedia
-        $wiki = data_get($row, 'wikipediaUrl.value');
-        if ($wiki) {
-            $links[] = ['type' => ArtistLinkType::WIKIPEDIA->value, 'url' => $wiki, 'is_official' => true];
-        }
-
-        // Social/platform IDs
+        // Twitter (P2002)
         if ($v = data_get($row, 'twitter.value')) {
             $links[] = ['type' => ArtistLinkType::TWITTER->value, 'url' => "https://twitter.com/{$v}", 'is_official' => true];
         }
+
+        // Instagram (P2003)
         if ($v = data_get($row, 'instagram.value')) {
             $links[] = ['type' => ArtistLinkType::INSTAGRAM->value, 'url' => "https://www.instagram.com/{$v}", 'is_official' => true];
         }
+
+        // Facebook (P2013)
         if ($v = data_get($row, 'facebook.value')) {
             $links[] = ['type' => ArtistLinkType::FACEBOOK->value, 'url' => "https://www.facebook.com/{$v}", 'is_official' => true];
         }
+
+        // YouTube channel (P2397)
         if ($v = data_get($row, 'youtubeChannel.value')) {
             $links[] = ['type' => ArtistLinkType::YOUTUBE->value, 'url' => "https://www.youtube.com/channel/{$v}", 'is_official' => true];
         }
+
+        // Spotify artist (P1902)
         if ($v = data_get($row, 'spotifyArtistId.value')) {
             $links[] = ['type' => ArtistLinkType::SPOTIFY->value, 'url' => "https://open.spotify.com/artist/{$v}", 'is_official' => true];
         }
+
+        // Apple Music (P2850)
         if ($v = data_get($row, 'appleMusicArtistId.value')) {
-            // best-effort canonical form (Apple Music IDs aren’t always directly URL-ready)
             $links[] = ['type' => ArtistLinkType::APPLE_MUSIC->value, 'url' => "https://music.apple.com/artist/{$v}", 'is_official' => true];
         }
+
+        // Deezer (P2722) - requires enum case DEEZER = 'deezer'
         if ($v = data_get($row, 'deezerArtistId.value')) {
             $links[] = ['type' => ArtistLinkType::DEEZER->value, 'url' => "https://www.deezer.com/artist/{$v}", 'is_official' => true];
         }
+
+        // SoundCloud (P3040)
         if ($v = data_get($row, 'soundcloudId.value')) {
             $links[] = ['type' => ArtistLinkType::SOUNDCLOUD->value, 'url' => "https://soundcloud.com/{$v}", 'is_official' => true];
         }
+
+        // Bandcamp (P3283)
         if ($v = data_get($row, 'bandcampId.value')) {
-            // bandcamp IDs can be tricky (subdomain vs path); keep best-effort
             $links[] = ['type' => ArtistLinkType::BANDCAMP->value, 'url' => "https://bandcamp.com/{$v}", 'is_official' => true];
         }
+
+        // Subreddit (P3984)
         if ($v = data_get($row, 'subreddit.value')) {
             $links[] = ['type' => ArtistLinkType::REDDIT->value, 'url' => "https://www.reddit.com/r/{$v}", 'is_official' => true];
         }
