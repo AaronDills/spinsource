@@ -9,24 +9,31 @@ use Illuminate\Support\Facades\Log;
 class WikidataDispatchSeedGenres extends Command
 {
     protected $signature = 'wikidata:dispatch-seed-genres
-        {--page-size=100}
-        {--offset=0}';
+        {--page-size=500 : Number of records per page}
+        {--after-qid= : Start after this Wikidata QID (e.g. Q12345)}';
 
     protected $description = 'Dispatch queued jobs to seed genres from Wikidata';
 
     public function handle(): int
     {
         $pageSize = max(25, min(2000, (int) $this->option('page-size')));
-        $offset = max(0, (int) $this->option('offset'));
+        $afterQid = $this->option('after-qid');
 
-        WikidataSeedGenres::dispatch($offset, $pageSize);
+        if ($afterQid !== null && ! preg_match('/^Q\d+$/', $afterQid)) {
+            $this->error('Invalid --after-qid. Must be in the form Q12345.');
+            return self::FAILURE;
+        }
+
+        WikidataSeedGenres::dispatch($afterQid, $pageSize);
 
         Log::info('Dispatched Wikidata genre seeding', [
-            'offset' => $offset,
+            'afterQid' => $afterQid,
             'pageSize' => $pageSize,
         ]);
 
-        $this->info("Dispatched first page job (offset={$offset}, pageSize={$pageSize}).");
+        $start = $afterQid ? "after {$afterQid}" : 'from beginning';
+        $this->info("Dispatched first page job ({$start}, pageSize={$pageSize}).");
+
         return self::SUCCESS;
     }
 }
