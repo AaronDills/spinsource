@@ -45,6 +45,7 @@ class Album extends Model
     public function toSearchableArray(): array
     {
         return [
+            'id' => (string) $this->id,
             'title' => $this->title,
             'description' => $this->description,
             'release_year' => $this->release_year,
@@ -52,9 +53,4 @@ class Album extends Model
         ];
     }
 
-
-    public function getScoutKey(): mixed
-    {
-        return 'album_' . (string) $this->getKey();
-    }
 }

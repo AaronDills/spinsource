@@ -51,15 +51,11 @@ class Artist extends Model
     public function toSearchableArray(): array
     {
         return [
+            'id' => (string) $this->id,
             'name' => $this->name,
             'sort_name' => $this->sort_name,
             'description' => $this->description,
         ];
-    }
-
-    public function getScoutKey(): mixed
-    {
-        return 'artist_' . (string) $this->getKey();
     }
 
 }

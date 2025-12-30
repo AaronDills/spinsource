@@ -111,12 +111,15 @@ RUN composer install \
     --no-progress \
     --prefer-dist
 
+# Install npm dependencies
+RUN npm install
+
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 storage bootstrap/cache
 
-# Create supervisor log directory
-RUN mkdir -p /var/log/supervisor
+# Create log directories
+RUN mkdir -p /var/log/supervisor /var/log/php
 
 # Copy development configurations
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf

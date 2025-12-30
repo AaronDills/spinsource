@@ -19,12 +19,6 @@ services:
     environment:
       - APP_ENV=local
       - APP_DEBUG=true
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=${DB_DATABASE:-spinsource}
-      - DB_USERNAME=${DB_USERNAME:-spinsource}
-      - DB_PASSWORD=${DB_PASSWORD:-secret}
       - CACHE_STORE=redis
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -117,10 +111,11 @@ services:
     volumes:
       - typesense-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8108'"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 30s
     networks:
       - spinsource
 
