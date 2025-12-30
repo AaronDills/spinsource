@@ -9,24 +9,33 @@ use Illuminate\Support\Facades\Log;
 class WikidataDispatchSeedAlbums extends Command
 {
     protected $signature = 'wikidata:dispatch-seed-albums
-        {--batch-size=50 : Number of artists to process per batch}
-        {--offset=0 : Start offset for artist pagination}';
+        {--artist-batch-size=25 : Number of local artists to include per WDQS batch}
+        {--after-artist-id= : Start after this local artists.id (cursor pagination)}';
 
     protected $description = 'Dispatch queued jobs to seed albums from Wikidata for existing artists';
 
     public function handle(): int
     {
-        $batchSize = max(10, min(200, (int) $this->option('batch-size')));
-        $offset = max(0, (int) $this->option('offset'));
+        $artistBatchSize = max(5, min(100, (int) $this->option('artist-batch-size')));
+        $afterArtistId = $this->option('after-artist-id');
 
-        WikidataSeedAlbums::dispatch($offset, $batchSize);
+        if ($afterArtistId !== null && (!ctype_digit((string) $afterArtistId) || (int) $afterArtistId < 0)) {
+            $this->error('Invalid --after-artist-id. Must be a non-negative integer (local artists.id).');
+            return self::FAILURE;
+        }
+
+        $afterArtistId = $afterArtistId !== null ? (int) $afterArtistId : null;
+
+        WikidataSeedAlbums::dispatch($afterArtistId, $artistBatchSize);
 
         Log::info('Dispatched Wikidata album seeding', [
-            'offset' => $offset,
-            'batchSize' => $batchSize,
+            'afterArtistId' => $afterArtistId,
+            'artistBatchSize' => $artistBatchSize,
         ]);
 
-        $this->info("Dispatched album seeding job (offset={$offset}, batchSize={$batchSize}).");
+        $start = $afterArtistId ? "after artists.id={$afterArtistId}" : 'from beginning';
+        $this->info("Dispatched album seeding job ({$start}, artistBatchSize={$artistBatchSize}).");
+
         return self::SUCCESS;
     }
 }
