@@ -7,8 +7,6 @@ SELECT DISTINCT
   ?parentGenre ?parentGenreLabel
   ?musicBrainzId
 WHERE {
-  ?artist wdt:P31 wd:Q215380 ;
-          wdt:P136 ?genre .
 
   ?genre wdt:P31 wd:Q188451 .
 
