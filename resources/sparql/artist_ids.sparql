@@ -1,15 +1,16 @@
 SELECT DISTINCT ?artist WHERE {
   {
-    # Solo artists: humans with occupation musician
-        ?artist wdt:P31 wd:Q5 ;
-        wdt:P434 ?mbid .   # MusicBrainz artist ID
+    # Humans who are musicians (broad: includes many solo artists)
+    ?artist wdt:P31 wd:Q5 ;
+            wdt:P106/wdt:P279* wd:Q639669 .
   }
   UNION
   {
-    # Bands / groups
+    # Musical groups (including subclasses)
     ?artist wdt:P31/wdt:P279* wd:Q215380 .
   }
+
+  {{after_filter}}
 }
 ORDER BY ?artist
 LIMIT {{limit}}
-OFFSET {{offset}}
