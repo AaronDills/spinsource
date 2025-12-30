@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('genres', function (Blueprint $table) {
-            $table->smallInteger('inception_year')->nullable()->index()->change();
+            $table->smallInteger('inception_year')->nullable()->change();
         });
     }
 
@@ -22,7 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('genres', function (Blueprint $table) {
-            $table->unsignedSmallInteger('inception_year')->nullable()->index()->change();
+            $table->unsignedSmallInteger('inception_year')->nullable()->change();
         });
     }
 };
