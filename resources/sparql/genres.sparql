@@ -7,7 +7,6 @@ SELECT DISTINCT
   ?parentGenre ?parentGenreLabel
   ?musicBrainzId
 WHERE {
-
   ?genre wdt:P31 wd:Q188451 .
 
   OPTIONAL { ?genre wdt:P571 ?inception . }
@@ -15,8 +14,11 @@ WHERE {
   OPTIONAL { ?genre wdt:P279 ?parentGenre . }
   OPTIONAL { ?genre wdt:P436 ?musicBrainzId . }
 
+  # Cursor paging by QID (optional)
+  BIND(STRAFTER(STR(?genre), "entity/") AS ?genreQid)
+  {{after_filter}}
+
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
-ORDER BY ?genreLabel
+ORDER BY ?genreQid
 LIMIT {{limit}}
-OFFSET {{offset}}
