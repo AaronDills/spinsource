@@ -21,15 +21,19 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
     public int $timeout = 120;
     public array $backoff = [5, 15, 45, 120, 300];
 
+    // Prevent yesterday’s START cursor uniqueness from blocking today’s run
+    public int $uniqueFor = 60 * 60; // 1 hour
+
     public function __construct(
-        public int $offset,
-        public int $pageSize = 200,
-        public int $batchSize = 50, // how many QIDs per enrich job
+        public ?string $afterQid = null,
+        public int $pageSize = 2000,
+        public int $batchSize = 100, // how many QIDs per enrich job
     ) {}
 
     public function uniqueId(): string
     {
-        return "wikidata:artist_ids:offset:{$this->offset}:size:{$this->pageSize}";
+        $cursor = $this->afterQid ?? 'START';
+        return "wikidata:artist_ids:after:{$cursor}:size:{$this->pageSize}";
     }
 
     public function handle(): void
@@ -38,14 +42,19 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
         $ua = config('wikidata.user_agent');
 
         Log::info('Wikidata artist ID page start', [
-            'offset' => $this->offset,
-            'pageSize' => $this->pageSize,
+            'afterQid'  => $this->afterQid,
+            'pageSize'  => $this->pageSize,
             'batchSize' => $this->batchSize,
         ]);
 
-        $sparql = Sparql::load('artist_ids', [
-            'limit' => $this->pageSize,
-            'offset' => $this->offset,
+        $afterFilter = '';
+        if ($this->afterQid && preg_match('/^Q\d+$/', $this->afterQid)) {
+            $afterFilter = "FILTER(?artist > wd:{$this->afterQid})";
+        }
+
+        $sparql = Sparql::load('artist_ids_cursor', [
+            'limit'        => $this->pageSize,
+            'after_filter' => $afterFilter,
         ]);
 
         try {
@@ -66,10 +75,10 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
                 ->throw();
         } catch (RequestException $e) {
             Log::warning('Wikidata artist ID page request failed', [
-                'offset' => $this->offset,
+                'afterQid' => $this->afterQid,
                 'pageSize' => $this->pageSize,
-                'status' => optional($e->response)->status(),
-                'message' => $e->getMessage(),
+                'status'   => optional($e->response)->status(),
+                'message'  => $e->getMessage(),
             ]);
             throw $e;
         }
@@ -79,7 +88,7 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
 
         if ($count === 0) {
             Log::info('Wikidata artist seeding completed (no more IDs)', [
-                'offset' => $this->offset,
+                'afterQid' => $this->afterQid,
                 'pageSize' => $this->pageSize,
             ]);
             return;
@@ -92,28 +101,35 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
         }
 
         $qids = array_values(array_unique($qids));
+
+        // Cursor for next page = last item in this page
+        $lastArtistUrl = data_get($bindings[$count - 1], 'artist.value');
+        $nextAfterQid  = $this->qidFromEntityUrl($lastArtistUrl);
+
         Log::info('Wikidata artist ID page fetched', [
-            'offset' => $this->offset,
-            'pageSize' => $this->pageSize,
-            'returned' => $count,
-            'uniqueQids' => count($qids),
+            'afterQid'    => $this->afterQid,
+            'pageSize'    => $this->pageSize,
+            'returned'    => $count,
+            'uniqueQids'  => count($qids),
+            'nextAfterQid'=> $nextAfterQid,
         ]);
 
-        // Dispatch enrichment in smaller batches to keep WDQS queries cheap.
+        // Dispatch enrichment in smaller batches to keep per-job work bounded
         $chunks = array_chunk($qids, max(10, $this->batchSize));
         foreach ($chunks as $chunk) {
             WikidataEnrichArtists::dispatch($chunk)->onQueue($this->queue ?? 'default');
         }
 
-        // If we got a full page, enqueue next page.
-        if ($count === $this->pageSize) {
+        // If we got a full page and have a cursor, enqueue next page.
+        if ($count === $this->pageSize && $nextAfterQid) {
             usleep(250_000);
-            self::dispatch($this->offset + $this->pageSize, $this->pageSize, $this->batchSize)
+
+            self::dispatch($nextAfterQid, $this->pageSize, $this->batchSize)
                 ->onQueue($this->queue ?? 'default');
 
             Log::info('Enqueued next Wikidata artist ID page', [
-                'nextOffset' => $this->offset + $this->pageSize,
-                'pageSize' => $this->pageSize,
+                'nextAfterQid' => $nextAfterQid,
+                'pageSize'     => $this->pageSize,
             ]);
         }
     }
