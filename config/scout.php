@@ -207,6 +207,18 @@ return [
                     'query_by' => 'title,artist_name,description',
                 ],
             ],
+            \App\Models\Genre::class => [
+                'collection-schema' => [
+                    'fields' => [
+                        ['name' => 'id', 'type' => 'string'],
+                        ['name' => 'name', 'type' => 'string'],
+                        ['name' => 'description', 'type' => 'string', 'optional' => true],
+                    ],
+                ],
+                'search-parameters' => [
+                    'query_by' => 'name,description',
+                ],
+            ],
         ],
         'import_action' => env('TYPESENSE_IMPORT_ACTION', 'upsert'),
     ],

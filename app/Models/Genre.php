@@ -6,9 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Scout\Searchable;
 
 class Genre extends Model
 {
+    use Searchable;
+
     protected $fillable = [
         'name',
         'wikidata_id',
@@ -37,5 +40,18 @@ class Genre extends Model
     public function artists(): BelongsToMany
     {
         return $this->belongsToMany(Artist::class);
+    }
+
+    public function toSearchableArray(): array
+    {
+        return [
+            'name' => $this->name,
+            'description' => $this->description,
+        ];
+    }
+
+    public function getScoutKey(): mixed
+    {
+        return 'genre_' . (string) $this->getKey();
     }
 }
