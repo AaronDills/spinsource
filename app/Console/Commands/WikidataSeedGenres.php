@@ -13,7 +13,7 @@ class WikidataSeedGenres extends Command
 {
     protected $signature = 'wikidata:seed-genres
         {--limit=0 : Max rows to process total (0 = no limit)}
-        {--page-size=500 : SPARQL page size}
+        {--page-size=100 : SPARQL page size}
         {--dry-run : Do not write to DB, only report}
         {--offset=0 : Start offset for SPARQL pagination}';
 
