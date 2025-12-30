@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -17,3 +18,19 @@ Schedule::command('wikidata:sync')
     ->dailyAt('00:00')
     ->onOneServer()
     ->withoutOverlapping();
+
+/*
+|--------------------------------------------------------------------------
+| Scout Index Sync Schedule
+|--------------------------------------------------------------------------
+|
+| Rebuild search indexes daily at noon to keep Typesense in sync.
+|
+*/
+
+Schedule::command('scout:flush', ['App\Models\Artist'])
+    ->dailyAt('12:00')
+    ->onOneServer()
+    ->then(fn () => Artisan::call('scout:flush', ['model' => 'App\Models\Album']))
+    ->then(fn () => Artisan::call('scout:import', ['model' => 'App\Models\Artist']))
+    ->then(fn () => Artisan::call('scout:import', ['model' => 'App\Models\Album']));

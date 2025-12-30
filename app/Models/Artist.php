@@ -57,4 +57,10 @@ class Artist extends Model
             'description' => $this->description,
         ];
     }
+
+    public function getScoutKey(): mixed
+    {
+        return 'artist_' . (string) $this->getKey();
+    }
+
 }

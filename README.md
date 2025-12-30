@@ -79,6 +79,7 @@ The scheduler is configured in `routes/console.php`:
 | `wikidata:dispatch-seed-genres` | 3:00 AM | Seed genres from Wikidata |
 | `wikidata:dispatch-seed-artists` | 3:30 AM | Seed artists from Wikidata |
 | `wikidata:sync` | 8:00 PM | Orchestrate sync operations |
+| Scout index rebuild (chained) | 12:00 PM | Flush and reimport Artist and Album indexes |
 
 To run the scheduler, add this cron entry:
 

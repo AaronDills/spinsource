@@ -52,4 +52,10 @@ class Album extends Model
             'artist_name' => $this->artist?->name,
         ];
     }
+
+
+    public function getScoutKey(): mixed
+    {
+        return 'album_' . (string) $this->getKey();
+    }
 }
