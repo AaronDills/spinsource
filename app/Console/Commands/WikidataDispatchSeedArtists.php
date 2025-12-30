@@ -11,7 +11,7 @@ class WikidataDispatchSeedArtists extends Command
     protected $signature = 'wikidata:dispatch-seed-artists
         {--page-size=2000 : Artist ID page size}
         {--batch-size=100 : Artist QIDs per enrich job}
-        {--after-qid= : Start after this Wikidata QID (e.g. Q12345)}';
+        {--after-oid= : Start after this Wikidata numeric O-ID (e.g. 12345 for Q12345)}';
 
     protected $description = 'Dispatch queued jobs to seed artists from Wikidata';
 
@@ -19,22 +19,25 @@ class WikidataDispatchSeedArtists extends Command
     {
         $pageSize  = max(50, min(5000, (int) $this->option('page-size')));
         $batchSize = max(10, min(500, (int) $this->option('batch-size')));
-        $afterQid  = $this->option('after-qid');
+        $afterOid  = $this->option('after-oid');
 
-        if ($afterQid !== null && ! preg_match('/^Q\d+$/', $afterQid)) {
-            $this->error('Invalid --after-qid. Must be in the form Q12345.');
-            return self::FAILURE;
+        if ($afterOid !== null) {
+            if (! ctype_digit($afterOid) || (int) $afterOid <= 0) {
+                $this->error('Invalid --after-oid. Must be a positive integer (e.g. 12345 for Q12345).');
+                return self::FAILURE;
+            }
+            $afterOid = (int) $afterOid;
         }
 
-        WikidataSeedArtistIds::dispatch($afterQid, $pageSize, $batchSize);
+        WikidataSeedArtistIds::dispatch($afterOid, $pageSize, $batchSize);
 
         Log::info('Dispatched Wikidata artist seeding', [
-            'afterQid'  => $afterQid,
+            'afterOid'  => $afterOid,
             'pageSize'  => $pageSize,
             'batchSize' => $batchSize,
         ]);
 
-        $start = $afterQid ? "after {$afterQid}" : 'from beginning';
+        $start = $afterOid ? "after O-ID {$afterOid}" : 'from beginning';
         $this->info("Dispatched first artist ID page job ({$start}, pageSize={$pageSize}, batchSize={$batchSize}).");
 
         return self::SUCCESS;

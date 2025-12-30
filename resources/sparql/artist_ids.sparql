@@ -1,4 +1,6 @@
-SELECT DISTINCT ?artist WHERE {
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT DISTINCT ?artist ?oid WHERE {
   {
     # Humans who are musicians (broad: includes many solo artists)
     ?artist wdt:P31 wd:Q5 ;
@@ -10,7 +12,9 @@ SELECT DISTINCT ?artist WHERE {
     ?artist wdt:P31/wdt:P279* wd:Q215380 .
   }
 
+  # Bind numeric O-ID for cursor paging
+  BIND(xsd:integer(STRAFTER(STR(?artist), "entity/Q")) AS ?oid)
   {{after_filter}}
 }
-ORDER BY ?artist
+ORDER BY ?oid
 LIMIT {{limit}}

@@ -1,5 +1,8 @@
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
 SELECT DISTINCT
   ?genre
+  ?oid
   ?genreLabel
   ?genreDescription
   ?inception
@@ -14,11 +17,11 @@ WHERE {
   OPTIONAL { ?genre wdt:P279 ?parentGenre . }
   OPTIONAL { ?genre wdt:P436 ?musicBrainzId . }
 
-  # Cursor paging by QID (optional)
-  BIND(STRAFTER(STR(?genre), "entity/") AS ?genreQid)
+  # Bind numeric O-ID for cursor paging
+  BIND(xsd:integer(STRAFTER(STR(?genre), "entity/Q")) AS ?oid)
   {{after_filter}}
 
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
-ORDER BY ?genreQid
+ORDER BY ?oid
 LIMIT {{limit}}
