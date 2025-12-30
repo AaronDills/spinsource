@@ -15,6 +15,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -24,32 +25,29 @@ class WikidataEnrichArtists implements ShouldQueue
 
     public int $tries = 5;
     public int $timeout = 120;
-
     public array $backoff = [5, 15, 45, 120, 300];
 
-    /**
-     * @param array<int, string> $artistQids
-     */
-    public function __construct(public array $artistQids) {}
+    /** @param array<int,string> $artistQids */
+    public function __construct(public array $artistQids = [])
+    {
+    }
 
     public function handle(): void
     {
         $endpoint = config('wikidata.endpoint');
         $ua = config('wikidata.user_agent');
 
-        $artistQids = array_values(array_unique(array_filter($this->artistQids)));
-        if (count($artistQids) === 0) {
-            return;
-        }
+        $artistQids = array_values(array_unique(array_filter($this->artistQids, fn ($q) => is_string($q) && preg_match('/^Q\d+$/', $q))));
+        if (count($artistQids) === 0) return;
 
         Log::info('Wikidata artist enrich batch start', [
-            'count' => count($artistQids),
+            'count'  => count($artistQids),
             'sample' => array_slice($artistQids, 0, 5),
         ]);
 
         $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $artistQids));
 
-        $sparql = Sparql::load('artist_enrich', [
+        $sparql = Sparql::load('artist_enrich_agg', [
             'values' => $values,
         ]);
 
@@ -71,290 +69,213 @@ class WikidataEnrichArtists implements ShouldQueue
                 ->throw();
         } catch (RequestException $e) {
             Log::warning('Wikidata artist enrich request failed', [
-                'count' => count($artistQids),
-                'status' => optional($e->response)->status(),
+                'count'   => count($artistQids),
+                'status'  => optional($e->response)->status(),
                 'message' => $e->getMessage(),
             ]);
             throw $e;
         }
 
         $bindings = $response->json('results.bindings', []);
-        if (count($bindings) === 0) {
-            Log::info('Wikidata artist enrich batch returned no rows', [
+        if (empty($bindings)) {
+            Log::info('Wikidata artist enrich batch done (no rows)', [
                 'count' => count($artistQids),
             ]);
             return;
         }
 
-        $byArtist = [];
+        // 1 row per artist (because SPARQL is GROUPed)
+        $now = now();
+
+        $countriesToUpsert = [];      // [qid => name]
+        $artistRows = [];             // rows for Artist::upsert
+        $artistMeta = [];             // [wikidata_id => ['genreQids'=>[], 'links'=>[]]]
+        $allGenreQids = [];
+
         foreach ($bindings as $row) {
-            $qid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
+            $artistUrl = data_get($row, 'artist.value');
+            $qid = $this->qidFromEntityUrl($artistUrl);
             if (! $qid) continue;
 
-            $byArtist[$qid] ??= [
-                'qid' => $qid,
-                'name' => null,
-                'description' => null,
+            $name = data_get($row, 'artistLabel.value');
+            // name is required in schema; fallback to QID if label missing
+            $name = $name ?: $qid;
 
-                'instanceOfQids' => [],
-
-                'countryQid' => null,
-                'countryName' => null,
-                'officialWebsite' => null,
-                'wikipediaUrl' => null,
-
-                'imageCommons' => null,
-                'logoCommons' => null,
-                'commonsCategory' => null,
-
-                'formedYear' => null,
-                'disbandedYear' => null,
-
-                'musicBrainzId' => null,
-                'givenName' => null,
-                'familyName' => null,
-
-                'genreQids' => [],
-
-                // link fields
-                'twitter' => null,
-                'instagram' => null,
-                'facebook' => null,
-                'youtubeChannel' => null,
-                'spotifyArtistId' => null,
-                'appleMusicArtistId' => null,
-                'deezerArtistId' => null,
-                'soundcloudId' => null,
-                'bandcampId' => null,
-                'subreddit' => null,
-            ];
-
-            $byArtist[$qid]['name'] = $byArtist[$qid]['name'] ?? data_get($row, 'artistLabel.value');
-            $byArtist[$qid]['description'] = $byArtist[$qid]['description'] ?? data_get($row, 'artistDescription.value');
-
-            $instQid = $this->qidFromEntityUrl(data_get($row, 'instanceOf.value'));
-            if ($instQid) {
-                $byArtist[$qid]['instanceOfQids'][] = $instQid;
-            }
+            $instanceOfStr = (string) data_get($row, 'instanceOf.value', '');
+            $instanceOfUrls = $instanceOfStr !== '' ? explode('|', $instanceOfStr) : [];
+            $artistType = in_array('http://www.wikidata.org/entity/Q5', $instanceOfUrls, true) ? 'person' : 'group';
 
             $countryQid = $this->qidFromEntityUrl(data_get($row, 'country.value'));
-            if ($countryQid) {
-                $byArtist[$qid]['countryQid'] = $countryQid;
-                $byArtist[$qid]['countryName'] = $byArtist[$qid]['countryName'] ?? data_get($row, 'countryLabel.value');
+            $countryName = data_get($row, 'countryLabel.value');
+
+            if ($countryQid && $countryName) {
+                $countriesToUpsert[$countryQid] = $countryName;
             }
 
-            $byArtist[$qid]['officialWebsite'] = $byArtist[$qid]['officialWebsite'] ?? data_get($row, 'officialWebsite.value');
-            $byArtist[$qid]['wikipediaUrl'] = $byArtist[$qid]['wikipediaUrl'] ?? data_get($row, 'wikipediaUrl.value');
+            $formedYear = $this->extractYear(data_get($row, 'formed.value'));
+            $disbandedYear = $this->extractYear(data_get($row, 'disbanded.value'));
 
-            $byArtist[$qid]['imageCommons'] = $byArtist[$qid]['imageCommons'] ?? $this->commonsFilename(data_get($row, 'imageCommons.value'));
-            $byArtist[$qid]['logoCommons'] = $byArtist[$qid]['logoCommons'] ?? $this->commonsFilename(data_get($row, 'logoCommons.value'));
-            $byArtist[$qid]['commonsCategory'] = $byArtist[$qid]['commonsCategory'] ?? data_get($row, 'commonsCategory.value');
+            $given = data_get($row, 'givenNameLabel.value');
+            $family = data_get($row, 'familyNameLabel.value');
+            $sortName = $this->computeSortName($name, $given, $family);
 
-            $byArtist[$qid]['formedYear'] = $byArtist[$qid]['formedYear'] ?? $this->extractYear(data_get($row, 'formed.value'));
-            $byArtist[$qid]['disbandedYear'] = $byArtist[$qid]['disbandedYear'] ?? $this->extractYear(data_get($row, 'disbanded.value'));
+            $imageCommons = $this->commonsFilename(data_get($row, 'imageCommons.value'));
+            $logoCommons  = $this->commonsFilename(data_get($row, 'logoCommons.value'));
 
-            $byArtist[$qid]['musicBrainzId'] = $byArtist[$qid]['musicBrainzId'] ?? data_get($row, 'musicBrainzId.value');
+            $artistRows[] = [
+                'wikidata_id'      => $qid,
+                'name'             => $name,
+                'sort_name'        => $sortName,
+                'artist_type'      => $artistType,
+                'musicbrainz_id'   => data_get($row, 'musicBrainzId.value'),
+                'description'      => data_get($row, 'artistDescription.value'),
+                'wikipedia_url'    => data_get($row, 'wikipediaUrl.value'),
+                'official_website' => data_get($row, 'officialWebsite.value'),
+                'image_commons'    => $imageCommons,
+                'logo_commons'     => $logoCommons,
+                'commons_category' => data_get($row, 'commonsCategory.value'),
+                'formed_year'      => $formedYear,
+                'disbanded_year'   => $disbandedYear,
+                // temporarily store country QID; we’ll map to country_id after upsert
+                '__country_qid'     => $countryQid,
+                'created_at'       => $now,
+                'updated_at'       => $now,
+            ];
 
-            $byArtist[$qid]['givenName'] = $byArtist[$qid]['givenName'] ?? data_get($row, 'givenNameLabel.value');
-            $byArtist[$qid]['familyName'] = $byArtist[$qid]['familyName'] ?? data_get($row, 'familyNameLabel.value');
+            // Genres (multi-valued string)
+            $genreStr = (string) data_get($row, 'genre.value', '');
+            $genreUrls = $genreStr !== '' ? explode('|', $genreStr) : [];
+            $genreQids = array_values(array_unique(array_filter(array_map([$this, 'qidFromEntityUrl'], $genreUrls))));
+            $allGenreQids = array_merge($allGenreQids, $genreQids);
 
-            $genreQid = $this->qidFromEntityUrl(data_get($row, 'genre.value'));
-            if ($genreQid) {
-                $byArtist[$qid]['genreQids'][] = $genreQid;
+            // Links
+            $links = $this->buildLinksFromRow($row);
+
+            $artistMeta[$qid] = [
+                'countryQid' => $countryQid,
+                'genreQids'  => $genreQids,
+                'links'      => $links,
+            ];
+        }
+
+        // Upsert Countries in bulk
+        if (!empty($countriesToUpsert)) {
+            $countryRows = [];
+            foreach ($countriesToUpsert as $qid => $nm) {
+                $countryRows[] = [
+                    'wikidata_id' => $qid,
+                    'name'        => $nm,
+                    'created_at'  => $now,
+                    'updated_at'  => $now,
+                ];
             }
 
-            // socials / ids
-            $byArtist[$qid]['twitter'] = $byArtist[$qid]['twitter'] ?? data_get($row, 'twitter.value');
-            $byArtist[$qid]['instagram'] = $byArtist[$qid]['instagram'] ?? data_get($row, 'instagram.value');
-            $byArtist[$qid]['facebook'] = $byArtist[$qid]['facebook'] ?? data_get($row, 'facebook.value');
-            $byArtist[$qid]['youtubeChannel'] = $byArtist[$qid]['youtubeChannel'] ?? data_get($row, 'youtubeChannel.value');
-            $byArtist[$qid]['spotifyArtistId'] = $byArtist[$qid]['spotifyArtistId'] ?? data_get($row, 'spotifyArtistId.value');
-            $byArtist[$qid]['appleMusicArtistId'] = $byArtist[$qid]['appleMusicArtistId'] ?? data_get($row, 'appleMusicArtistId.value');
-            $byArtist[$qid]['deezerArtistId'] = $byArtist[$qid]['deezerArtistId'] ?? data_get($row, 'deezerArtistId.value');
-            $byArtist[$qid]['soundcloudId'] = $byArtist[$qid]['soundcloudId'] ?? data_get($row, 'soundcloudId.value');
-            $byArtist[$qid]['bandcampId'] = $byArtist[$qid]['bandcampId'] ?? data_get($row, 'bandcampId.value');
-            $byArtist[$qid]['subreddit'] = $byArtist[$qid]['subreddit'] ?? data_get($row, 'subreddit.value');
+            Country::upsert($countryRows, ['wikidata_id'], ['name', 'updated_at']);
         }
 
-        // Preload genres by wikidata_id for pivots
-        $allGenreQids = [];
-        foreach ($byArtist as $data) {
-            $allGenreQids = array_merge($allGenreQids, $data['genreQids']);
-        }
-        $allGenreQids = array_values(array_unique($allGenreQids));
-
-        $genresByQid = Genre::query()
-            ->whereIn('wikidata_id', $allGenreQids)
+        $countriesByQid = Country::query()
+            ->whereIn('wikidata_id', array_keys($countriesToUpsert))
             ->get(['id', 'wikidata_id'])
             ->keyBy('wikidata_id');
 
-        $upserted = 0;
-        $attached = 0;
-        $linksTouched = 0;
+        // Replace __country_qid with country_id for upsert
+        foreach ($artistRows as &$r) {
+            $cq = $r['__country_qid'] ?? null;
+            unset($r['__country_qid']);
+            $r['country_id'] = $cq && isset($countriesByQid[$cq]) ? $countriesByQid[$cq]->id : null;
+        }
+        unset($r);
 
-        foreach ($byArtist as $data) {
-            $countryId = null;
+        // Upsert Artists in bulk (conflict target: wikidata_id)
+        Artist::upsert(
+            $artistRows,
+            ['wikidata_id'],
+            [
+                'name',
+                'sort_name',
+                'artist_type',
+                'musicbrainz_id',
+                'description',
+                'wikipedia_url',
+                'official_website',
+                'image_commons',
+                'logo_commons',
+                'commons_category',
+                'formed_year',
+                'disbanded_year',
+                'country_id',
+                'updated_at',
+            ]
+        );
 
-            if ($data['countryQid'] && $data['countryName']) {
-                $country = Country::updateOrCreate(
-                    ['wikidata_id' => $data['countryQid']],
-                    ['name' => $data['countryName']]
-                );
-                $countryId = $country->id;
+        // Load artist IDs for pivot/link inserts
+        $artistsByQid = Artist::query()
+            ->whereIn('wikidata_id', array_keys($artistMeta))
+            ->get(['id', 'wikidata_id'])
+            ->keyBy('wikidata_id');
+
+        // Genres map
+        $allGenreQids = array_values(array_unique($allGenreQids));
+        $genresByQid = !empty($allGenreQids)
+            ? Genre::query()->whereIn('wikidata_id', $allGenreQids)->get(['id', 'wikidata_id'])->keyBy('wikidata_id')
+            : collect();
+
+        // Build bulk pivot/link rows
+        $pivotRows = [];
+        $linkRows  = [];
+
+        foreach ($artistMeta as $qid => $meta) {
+            $artist = $artistsByQid->get($qid);
+            if (! $artist) continue;
+
+            // Pivot rows
+            foreach ($meta['genreQids'] as $gqid) {
+                $genre = $genresByQid->get($gqid);
+                if (! $genre) continue;
+
+                $pivotRows[] = [
+                    'artist_id'   => $artist->id,
+                    'genre_id'    => $genre->id,
+                    'created_at'  => $now,
+                    'updated_at'  => $now,
+                ];
             }
 
-            $artistType = $this->inferArtistType($data['instanceOfQids']);
+            // Link rows
+            foreach ($meta['links'] as $lnk) {
+                $url = $this->normalizeUrl($lnk['url']);
+                if (! $url) continue;
 
-            $payload = array_filter([
-                'name'             => $data['name'],
-                'sort_name'        => $this->computeSortName($data['name'], $data['givenName'], $data['familyName']),
-                'artist_type'      => $artistType,
-                'musicbrainz_id'   => $data['musicBrainzId'],
-                'description'      => $data['description'],
-                'wikipedia_url'    => $data['wikipediaUrl'],
-                'official_website' => $data['officialWebsite'],
-                'image_commons'    => $data['imageCommons'],
-                'logo_commons'     => $data['logoCommons'],
-                'commons_category' => $data['commonsCategory'],
-                'formed_year'      => $data['formedYear'],
-                'disbanded_year'   => $data['disbandedYear'],
-                'country_id'       => $countryId,
-            ], static fn ($v) => $v !== null && $v !== '');
-
-            $artist = Artist::updateOrCreate(
-                ['wikidata_id' => $data['qid']],
-                $payload
-            );
-            $upserted++;
-
-            // Pivot: artist_genre
-            $genreIds = [];
-            foreach (array_unique($data['genreQids']) as $gqid) {
-                $g = $genresByQid->get($gqid);
-                if ($g) $genreIds[] = $g->id;
+                $linkRows[] = [
+                    'artist_id'    => $artist->id,
+                    'type'         => $lnk['type'],
+                    'url'          => $url,
+                    'source'       => 'wikidata',
+                    'is_official'  => (bool) $lnk['is_official'],
+                    'created_at'   => $now,
+                    'updated_at'   => $now,
+                ];
             }
-            if (count($genreIds) > 0) {
-                $artist->genres()->syncWithoutDetaching($genreIds);
-                $attached += count($genreIds);
-            }
+        }
 
-            // Links: artist_links (enum-aligned)
-            foreach ($this->buildLinks($data) as $link) {
-                ArtistLink::firstOrCreate(
-                    [
-                        'artist_id' => $artist->id,
-                        'type'      => $link['type'],
-                        'url'       => $link['url'],
-                    ],
-                    [
-                        'source'      => 'wikidata',
-                        'is_official' => $link['is_official'],
-                    ]
-                );
-                $linksTouched++;
-            }
+        // Bulk insert pivot + links (deduped by your unique constraints)
+        $pivotInserted = 0;
+        if (!empty($pivotRows)) {
+            $pivotInserted = DB::table('artist_genre')->insertOrIgnore($pivotRows);
+        }
+
+        $linksInserted = 0;
+        if (!empty($linkRows)) {
+            $linksInserted = ArtistLink::insertOrIgnore($linkRows);
         }
 
         Log::info('Wikidata artist enrich batch done', [
-            'artistsUpserted' => $upserted,
-            'genreLinksAddedOrConfirmed' => $attached,
-            'artistLinksInsertedOrConfirmed' => $linksTouched,
-            'artistsInResponse' => count($byArtist),
+            'requested'      => count($artistQids),
+            'rows'           => count($bindings),
+            'artistsUpserted'=> count($artistRows),
+            'pivotInserted'  => $pivotInserted,
+            'linksInserted'  => $linksInserted,
         ]);
-    }
-
-    /**
-     * @return array<int, array{type:string,url:string,is_official:bool}>
-     */
-    private function buildLinks(array $data): array
-    {
-        $links = [];
-
-        // WEBSITE (P856)
-        if (!empty($data['officialWebsite'])) {
-            $url = $this->normalizeUrl($data['officialWebsite']);
-            if ($url) $links[] = ['type' => ArtistLinkType::WEBSITE->value, 'url' => $url, 'is_official' => true];
-        }
-
-        // TWITTER (P2002)
-        if (!empty($data['twitter'])) {
-            $links[] = ['type' => ArtistLinkType::TWITTER->value, 'url' => "https://twitter.com/{$data['twitter']}", 'is_official' => true];
-        }
-
-        // INSTAGRAM (P2003)
-        if (!empty($data['instagram'])) {
-            $links[] = ['type' => ArtistLinkType::INSTAGRAM->value, 'url' => "https://www.instagram.com/{$data['instagram']}/", 'is_official' => true];
-        }
-
-        // FACEBOOK (P2013)
-        if (!empty($data['facebook'])) {
-            $links[] = ['type' => ArtistLinkType::FACEBOOK->value, 'url' => "https://www.facebook.com/{$data['facebook']}", 'is_official' => true];
-        }
-
-        // YOUTUBE (P2397)
-        if (!empty($data['youtubeChannel'])) {
-            $links[] = ['type' => ArtistLinkType::YOUTUBE->value, 'url' => "https://www.youtube.com/channel/{$data['youtubeChannel']}", 'is_official' => true];
-        }
-
-        // SPOTIFY (P1902)
-        if (!empty($data['spotifyArtistId'])) {
-            $links[] = ['type' => ArtistLinkType::SPOTIFY->value, 'url' => "https://open.spotify.com/artist/{$data['spotifyArtistId']}", 'is_official' => true];
-        }
-
-        // APPLE_MUSIC (P2850) - not in fromWikidataProperty currently, but in enum list
-        if (!empty($data['appleMusicArtistId'])) {
-            $links[] = ['type' => ArtistLinkType::APPLE_MUSIC->value, 'url' => "https://music.apple.com/us/artist/{$data['appleMusicArtistId']}", 'is_official' => true];
-        }
-
-        // SOUNDCLOUD (P3040)
-        if (!empty($data['soundcloudId'])) {
-            $links[] = ['type' => ArtistLinkType::SOUNDCLOUD->value, 'url' => "https://soundcloud.com/{$data['soundcloudId']}", 'is_official' => true];
-        }
-
-        // BANDCAMP (P3283) - best-effort URL
-        if (!empty($data['bandcampId'])) {
-            $links[] = ['type' => ArtistLinkType::BANDCAMP->value, 'url' => "https://bandcamp.com/{$data['bandcampId']}", 'is_official' => true];
-        }
-
-        // REDDIT (P3984)
-        if (!empty($data['subreddit'])) {
-            $links[] = ['type' => ArtistLinkType::REDDIT->value, 'url' => "https://www.reddit.com/r/{$data['subreddit']}/", 'is_official' => false];
-        }
-
-        // Normalize + de-dupe
-        $out = [];
-        $seen = [];
-        foreach ($links as $l) {
-            $url = $this->normalizeUrl($l['url']);
-            if (!$url) continue;
-
-            $key = $l['type'] . '|' . $url;
-            if (isset($seen[$key])) continue;
-            $seen[$key] = true;
-
-            $out[] = ['type' => $l['type'], 'url' => $url, 'is_official' => (bool) $l['is_official']];
-        }
-
-        return $out;
-    }
-
-    private function normalizeUrl(?string $url): ?string
-    {
-        if (! $url) return null;
-        $url = trim($url);
-        if ($url === '' || !preg_match('#^https?://#i', $url)) return null;
-        return $url;
-    }
-
-    /**
-     * @param array<int,string> $instanceOfQids
-     */
-    private function inferArtistType(array $instanceOfQids): ?string
-    {
-        $set = array_flip(array_unique($instanceOfQids));
-        if (isset($set['Q5'])) return 'person';
-        if (isset($set['Q215380'])) return 'group';
-        return null;
     }
 
     private function qidFromEntityUrl(?string $url): ?string
@@ -379,28 +300,103 @@ class WikidataEnrichArtists implements ShouldQueue
         }
     }
 
+    private function computeSortName(string $displayName, ?string $given, ?string $family): string
+    {
+        $given = $given ? trim($given) : null;
+        $family = $family ? trim($family) : null;
+
+        if ($family) {
+            if ($given) return "{$family}, {$given}";
+            return $family;
+        }
+
+        return trim($displayName);
+    }
+
     private function commonsFilename(?string $value): ?string
     {
         if (! $value) return null;
-        $pos = strrpos($value, '/');
-        $tail = $pos !== false ? substr($value, $pos + 1) : $value;
-        return ($tail !== '') ? urldecode($tail) : null;
-    }
 
-    private function computeSortName(?string $displayName, ?string $givenName, ?string $familyName): ?string
-    {
-        $displayName = $displayName ? trim($displayName) : null;
-        if (! $displayName) return null;
+        // Sometimes WDQS returns a URL (Special:FilePath/...), sometimes an entity URL. We just want the filename.
+        // Take the last path segment and urldecode it.
+        $value = trim($value);
 
-        $givenName = $givenName ? trim($givenName) : null;
-        $familyName = $familyName ? trim($familyName) : null;
-
-        if ($familyName) {
-            return $givenName ? "{$familyName}, {$givenName}" : $familyName;
+        // If it's like "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg"
+        if (str_contains($value, 'Special:FilePath/')) {
+            $value = substr($value, strrpos($value, 'Special:FilePath/') + strlen('Special:FilePath/'));
+        } else {
+            // Otherwise just use the last segment after '/'
+            $slash = strrpos($value, '/');
+            if ($slash !== false) $value = substr($value, $slash + 1);
         }
 
-        $n = mb_strtolower($displayName);
-        if (str_starts_with($n, 'the ')) $n = trim(substr($n, 4));
-        return $n;
+        $value = urldecode($value);
+        return $value !== '' ? $value : null;
+    }
+
+    private function normalizeUrl(?string $url): ?string
+    {
+        if (! $url) return null;
+        $url = trim($url);
+        if ($url === '') return null;
+        if (!preg_match('#^https?://#i', $url)) return null;
+        return $url;
+    }
+
+    /**
+     * Build canonical link URLs from a single aggregated row.
+     * Returns array<array{type:string,url:string,is_official:bool}>
+     */
+    private function buildLinksFromRow(array $row): array
+    {
+        $links = [];
+
+        // Official website
+        $official = data_get($row, 'officialWebsite.value');
+        if ($official) {
+            $links[] = ['type' => ArtistLinkType::OFFICIAL_WEBSITE->value, 'url' => $official, 'is_official' => true];
+        }
+
+        // Wikipedia
+        $wiki = data_get($row, 'wikipediaUrl.value');
+        if ($wiki) {
+            $links[] = ['type' => ArtistLinkType::WIKIPEDIA->value, 'url' => $wiki, 'is_official' => true];
+        }
+
+        // Social/platform IDs
+        if ($v = data_get($row, 'twitter.value')) {
+            $links[] = ['type' => ArtistLinkType::TWITTER->value, 'url' => "https://twitter.com/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'instagram.value')) {
+            $links[] = ['type' => ArtistLinkType::INSTAGRAM->value, 'url' => "https://www.instagram.com/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'facebook.value')) {
+            $links[] = ['type' => ArtistLinkType::FACEBOOK->value, 'url' => "https://www.facebook.com/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'youtubeChannel.value')) {
+            $links[] = ['type' => ArtistLinkType::YOUTUBE->value, 'url' => "https://www.youtube.com/channel/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'spotifyArtistId.value')) {
+            $links[] = ['type' => ArtistLinkType::SPOTIFY->value, 'url' => "https://open.spotify.com/artist/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'appleMusicArtistId.value')) {
+            // best-effort canonical form (Apple Music IDs aren’t always directly URL-ready)
+            $links[] = ['type' => ArtistLinkType::APPLE_MUSIC->value, 'url' => "https://music.apple.com/artist/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'deezerArtistId.value')) {
+            $links[] = ['type' => ArtistLinkType::DEEZER->value, 'url' => "https://www.deezer.com/artist/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'soundcloudId.value')) {
+            $links[] = ['type' => ArtistLinkType::SOUNDCLOUD->value, 'url' => "https://soundcloud.com/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'bandcampId.value')) {
+            // bandcamp IDs can be tricky (subdomain vs path); keep best-effort
+            $links[] = ['type' => ArtistLinkType::BANDCAMP->value, 'url' => "https://bandcamp.com/{$v}", 'is_official' => true];
+        }
+        if ($v = data_get($row, 'subreddit.value')) {
+            $links[] = ['type' => ArtistLinkType::REDDIT->value, 'url' => "https://www.reddit.com/r/{$v}", 'is_official' => true];
+        }
+
+        return $links;
     }
 }
