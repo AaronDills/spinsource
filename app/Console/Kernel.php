@@ -2,6 +2,11 @@
 
 namespace App\Console;
 
+use App\Jobs\Incremental\DiscoverChangedArtists;
+use App\Jobs\Incremental\DiscoverChangedGenres;
+use App\Jobs\Incremental\DiscoverNewArtistIds;
+use App\Jobs\Incremental\DiscoverNewGenres;
+use App\Jobs\Incremental\RefreshAlbumsForChangedArtists;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use Illuminate\Support\Facades\Artisan;
@@ -11,14 +16,11 @@ class Kernel extends ConsoleKernel
     /**
      * Define the application's command schedule.
      *
-     * Weekly Incremental Sync (wikidata:sync-weekly):
-     * - Discovers NEW entities added since last checkpoint (O-ID cursor)
-     * - Discovers CHANGED entities since last run (schema:dateModified)
-     * - Dispatches enrichment jobs only for deltas
-     * - Much faster than full backfill, generates fewer jobs/events
-     * - Suitable for weekly runs with Laravel Nightwatch monitoring
+     * Weekly Incremental Sync:
+     * Jobs are dispatched in dependency order to the wikidata queue.
+     * A single worker processes them sequentially, respecting rate limits.
      *
-     * The old backfill commands (wikidata:dispatch-seed-*) are still available
+     * The backfill commands (wikidata:dispatch-seed-*) are still available
      * for initial import or disaster recovery, but are NOT scheduled.
      */
     protected function schedule(Schedule $schedule): void
@@ -28,22 +30,23 @@ class Kernel extends ConsoleKernel
         | Weekly Incremental Wikidata Sync
         |--------------------------------------------------------------------------
         |
-        | Runs every Sunday at 2:00 AM to:
-        | 1. Discover new genres and changed genres
-        | 2. Discover new artists and changed artists
-        | 3. Refresh albums for changed artists
+        | Runs every Sunday at 2:00 AM. Jobs are dispatched in dependency order:
+        |   1. Genres (standalone reference data)
+        |   2. Artists (depend on genres for pivot linking)
+        |   3. Albums (depend on artists existing)
         |
-        | This incremental approach:
-        | - Reduces weekly runtime from hours to minutes
-        | - Limits job/event volume for observability tools (Nightwatch)
-        | - Uses checkpoints stored in ingestion_checkpoints table
+        | All jobs go to the wikidata queue with a single worker, ensuring
+        | sequential processing in dispatch order.
         |
         */
-        $schedule->command('wikidata:sync-weekly')
+        $schedule->call(fn () => DiscoverNewGenres::dispatch())
             ->weeklyOn(0, '02:00') // Sunday at 2:00 AM
             ->onOneServer()
             ->withoutOverlapping()
-            ->appendOutputTo(storage_path('logs/wikidata-sync.log'));
+            ->then(fn () => DiscoverChangedGenres::dispatch())
+            ->then(fn () => DiscoverNewArtistIds::dispatch())
+            ->then(fn () => DiscoverChangedArtists::dispatch())
+            ->then(fn () => RefreshAlbumsForChangedArtists::dispatch());
 
         /*
         |--------------------------------------------------------------------------
