@@ -60,6 +60,7 @@ class Kernel extends ConsoleKernel
         */
         $schedule->command('scout:flush', ['App\Models\Artist'])
             ->weeklyOn(0, '06:00') // Sunday at 6:00 AM
+            ->name('search:weekly-rebuild')
             ->onOneServer()
             ->then(fn () => Artisan::call('scout:flush', ['model' => 'App\Models\Album']))
             ->then(fn () => Artisan::call('scout:flush', ['model' => 'App\Models\Genre']))
