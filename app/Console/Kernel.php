@@ -59,9 +59,9 @@ class Kernel extends ConsoleKernel
             ->onOneServer()
             ->then(fn () => Artisan::call('scout:flush', ['model' => 'App\Models\Album']))
             ->then(fn () => Artisan::call('scout:flush', ['model' => 'App\Models\Genre']))
-            ->then(fn () => Artisan::call('scout:import', ['model' => 'App\Models\Artist']))
-            ->then(fn () => Artisan::call('scout:import', ['model' => 'App\Models\Album']))
-            ->then(fn () => Artisan::call('scout:import', ['model' => 'App\Models\Genre']));
+            ->then(fn () => Artisan::call('scout:queue-import', ['model' => 'App\Models\Artist']))
+            ->then(fn () => Artisan::call('scout:queue-import', ['model' => 'App\Models\Album']))
+            ->then(fn () => Artisan::call('scout:queue-import', ['model' => 'App\Models\Genre']));
     }
 
     /**
