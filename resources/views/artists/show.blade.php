@@ -66,9 +66,9 @@
                     @endif
 
                     @php
-                        $streamingLinks = $artist->links->whereIn('type', ['spotify', 'apple_music', 'deezer', 'soundcloud', 'bandcamp']);
-                        $socialLinks = $artist->links->whereIn('type', ['twitter', 'instagram', 'facebook', 'youtube', 'reddit']);
-                        $websiteLinks = $artist->links->where('type', 'website');
+                        $streamingLinks = $deduplicatedLinks->whereIn('type', ['spotify', 'apple_music', 'deezer', 'soundcloud', 'bandcamp']);
+                        $socialLinks = $deduplicatedLinks->whereIn('type', ['twitter', 'instagram', 'facebook', 'youtube', 'reddit']);
+                        $websiteLinks = $deduplicatedLinks->where('type', 'website');
                     @endphp
 
                     @if($streamingLinks->count() > 0 || $artist->wikipedia_url)
@@ -234,34 +234,44 @@
                         </div>
                     @endif
 
-                    @if($artist->albums->count() > 0)
+                    @if(count($albumsByType) > 0)
                         <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Discography</h2>
-                            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                @foreach($artist->albums->sortByDesc('release_year') as $album)
-                                    <a href="{{ route('album.show', $album) }}" class="group">
-                                        <div class="aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden mb-2">
-                                            @if($album->cover_image_url)
-                                                <img src="{{ $album->cover_image_url }}"
-                                                     alt="{{ $album->title }}"
-                                                     class="w-full h-full object-cover group-hover:scale-105 transition-transform">
-                                            @else
-                                                <div class="w-full h-full flex items-center justify-center">
-                                                    <span class="text-4xl">💿</span>
+
+                            @foreach($albumsByType as $section)
+                                <div class="@if(!$loop->first) mt-6 @endif">
+                                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+                                        {{ $section['label'] }}
+                                        <span class="text-gray-400 dark:text-gray-500 font-normal">({{ $section['albums']->count() }})</span>
+                                    </h3>
+                                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                                        @foreach($section['albums'] as $album)
+                                            <a href="{{ route('album.show', $album) }}" class="group">
+                                                <div class="aspect-square bg-gray-200 dark:bg-gray-700 rounded overflow-hidden mb-1">
+                                                    @if($album->cover_image_url)
+                                                        <img src="{{ $album->cover_image_url }}"
+                                                             alt="{{ $album->title }}"
+                                                             loading="lazy"
+                                                             class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                                                    @else
+                                                        <div class="w-full h-full flex items-center justify-center">
+                                                            <span class="text-2xl">💿</span>
+                                                        </div>
+                                                    @endif
                                                 </div>
-                                            @endif
-                                        </div>
-                                        <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                                            {{ $album->title }}
-                                        </h3>
-                                        @if($album->release_year)
-                                            <p class="text-xs text-gray-500 dark:text-gray-400">
-                                                {{ $album->release_year }}
-                                            </p>
-                                        @endif
-                                    </a>
-                                @endforeach
-                            </div>
+                                                <h4 class="text-xs font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                                                    {{ $album->title }}
+                                                </h4>
+                                                @if($album->release_year)
+                                                    <p class="text-xs text-gray-400 dark:text-gray-500">
+                                                        {{ $album->release_year }}
+                                                    </p>
+                                                @endif
+                                            </a>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
                     @endif
 

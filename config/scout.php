@@ -42,7 +42,7 @@ return [
     |
     */
 
-    'queue' => env('SCOUT_QUEUE', false),
+    'queue' => env('SCOUT_QUEUE', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -69,8 +69,8 @@ return [
     */
 
     'chunk' => [
-        'searchable' => 100,
-        'unsearchable' => 100,
+        'searchable' => 50,
+        'unsearchable' => 50,
     ],
 
     /*
@@ -186,16 +186,11 @@ return [
                         ['name' => 'id', 'type' => 'string'],
                         ['name' => 'name', 'type' => 'string'],
                         ['name' => 'sort_name', 'type' => 'string', 'optional' => true],
-                        ['name' => 'description', 'type' => 'string', 'optional' => true],
                         ['name' => 'rank_score', 'type' => 'int32', 'optional' => true, 'sort' => true],
-                        ['name' => 'spotify_artist_id', 'type' => 'string', 'optional' => true],
-                        ['name' => 'apple_music_artist_id', 'type' => 'string', 'optional' => true],
-                        ['name' => 'discogs_artist_id', 'type' => 'string', 'optional' => true],
-                        ['name' => 'musicbrainz_id', 'type' => 'string', 'optional' => true],
                     ],
                 ],
                 'search-parameters' => [
-                    'query_by' => 'name,sort_name,description',
+                    'query_by' => 'name,sort_name',
                     'sort_by' => '_text_match:desc,rank_score:desc',
                 ],
             ],
@@ -204,13 +199,12 @@ return [
                     'fields' => [
                         ['name' => 'id', 'type' => 'string'],
                         ['name' => 'title', 'type' => 'string'],
-                        ['name' => 'description', 'type' => 'string', 'optional' => true],
                         ['name' => 'release_year', 'type' => 'int32', 'optional' => true],
                         ['name' => 'artist_name', 'type' => 'string', 'optional' => true],
                     ],
                 ],
                 'search-parameters' => [
-                    'query_by' => 'title,artist_name,description',
+                    'query_by' => 'title,artist_name',
                 ],
             ],
             \App\Models\Genre::class => [

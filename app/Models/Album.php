@@ -66,7 +66,7 @@ class Album extends Model
     protected function makeAllSearchableUsing(Builder $query): Builder
     {
         return $query
-            ->select(['id', 'title', 'description', 'release_year', 'artist_id'])
+            ->select(['id', 'title', 'release_year', 'artist_id'])
             ->with('artist:id,name');
     }
 
@@ -75,7 +75,6 @@ class Album extends Model
         return [
             'id' => (string) $this->id,
             'title' => $this->title,
-            'description' => $this->description,
             'release_year' => $this->release_year,
             'artist_name' => $this->relationLoaded('artist')
                 ? $this->artist?->name

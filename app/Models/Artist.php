@@ -120,13 +120,10 @@ class Artist extends Model
             'id',
             'name',
             'sort_name',
-            'description',
             'wikipedia_url',
             'album_count',
             'link_count',
             'spotify_artist_id',
-            'apple_music_artist_id',
-            'discogs_artist_id',
             'musicbrainz_id',
         ]);
     }
@@ -137,12 +134,7 @@ class Artist extends Model
             'id' => (string) $this->id,
             'name' => $this->name,
             'sort_name' => $this->sort_name,
-            'description' => $this->description,
             'rank_score' => $this->rank_score,
-            'spotify_artist_id' => $this->spotify_artist_id,
-            'apple_music_artist_id' => $this->apple_music_artist_id,
-            'discogs_artist_id' => $this->discogs_artist_id,
-            'musicbrainz_id' => $this->musicbrainz_id,
         ];
     }
 }
