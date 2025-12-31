@@ -53,12 +53,6 @@ class WikidataDispatchEnrichAlbumCovers extends Command
         $this->info("Found {$totalCount} albums without cover images.");
         $this->info("Will process {$processCount} albums in {$jobCount} jobs (batch size: {$batchSize}).");
 
-        if (! $this->confirm('Dispatch jobs?')) {
-            $this->info('Cancelled.');
-
-            return self::SUCCESS;
-        }
-
         $dispatched = 0;
         $albumsProcessed = 0;
 
