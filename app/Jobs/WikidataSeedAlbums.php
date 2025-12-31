@@ -145,6 +145,8 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'album_type_qid' => null,
                 'publication_date' => null,
                 'musicbrainz_release_group_id' => null,
+                'spotify_album_id' => null,
+                'apple_music_album_id' => null,
                 'description' => null,
             ];
 
@@ -157,6 +159,8 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
             $byAlbum[$albumQid]['album_type_qid'] = $byAlbum[$albumQid]['album_type_qid'] ?? $this->qidFromEntityUrl(data_get($row, 'albumType.value'));
             $byAlbum[$albumQid]['publication_date'] = $byAlbum[$albumQid]['publication_date'] ?? data_get($row, 'publicationDate.value');
             $byAlbum[$albumQid]['musicbrainz_release_group_id'] = $byAlbum[$albumQid]['musicbrainz_release_group_id'] ?? data_get($row, 'musicBrainzReleaseGroupId.value');
+            $byAlbum[$albumQid]['spotify_album_id'] = $byAlbum[$albumQid]['spotify_album_id'] ?? data_get($row, 'spotifyAlbumId.value');
+            $byAlbum[$albumQid]['apple_music_album_id'] = $byAlbum[$albumQid]['apple_music_album_id'] ?? data_get($row, 'appleMusicAlbumId.value');
         }
 
         $now = now();
@@ -182,6 +186,8 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'release_date' => $releaseDate,
                 'description' => $data['description'],
                 'musicbrainz_release_group_id' => $data['musicbrainz_release_group_id'],
+                'spotify_album_id' => $data['spotify_album_id'],
+                'apple_music_album_id' => $data['apple_music_album_id'],
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -209,6 +215,8 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'release_date',
                 'description',
                 'musicbrainz_release_group_id',
+                'spotify_album_id',
+                'apple_music_album_id',
                 'updated_at',
             ]
         );

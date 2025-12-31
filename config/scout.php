@@ -187,10 +187,16 @@ return [
                         ['name' => 'name', 'type' => 'string'],
                         ['name' => 'sort_name', 'type' => 'string', 'optional' => true],
                         ['name' => 'description', 'type' => 'string', 'optional' => true],
+                        ['name' => 'rank_score', 'type' => 'int32', 'optional' => true, 'sort' => true],
+                        ['name' => 'spotify_artist_id', 'type' => 'string', 'optional' => true],
+                        ['name' => 'apple_music_artist_id', 'type' => 'string', 'optional' => true],
+                        ['name' => 'discogs_artist_id', 'type' => 'string', 'optional' => true],
+                        ['name' => 'musicbrainz_id', 'type' => 'string', 'optional' => true],
                     ],
                 ],
                 'search-parameters' => [
                     'query_by' => 'name,sort_name,description',
+                    'sort_by' => '_text_match:desc,rank_score:desc',
                 ],
             ],
             \App\Models\Album::class => [

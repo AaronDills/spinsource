@@ -15,6 +15,8 @@ class Album extends Model
         'title',
         'wikidata_id',
         'musicbrainz_release_group_id',
+        'spotify_album_id',
+        'apple_music_album_id',
         'artist_id',
         'album_type',
         'release_year',

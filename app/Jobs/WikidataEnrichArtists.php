@@ -196,6 +196,7 @@ class WikidataEnrichArtists extends WikidataJob
                     'youtubeChannel' => null,
                     'spotifyArtistId' => null,
                     'appleMusicArtistId' => null,
+                    'discogsArtistId' => null,
                     'deezerArtistId' => null,
                     'soundcloudId' => null,
                     'bandcampId' => null,
@@ -263,12 +264,18 @@ class WikidataEnrichArtists extends WikidataJob
             $imageCommons = $this->commonsFilename($basic['imageCommons'] ?? null);
             $logoCommons = $this->commonsFilename($basic['logoCommons'] ?? null);
 
+            // Extract external IDs from link data for direct column storage
+            $artistLinkData = $linkData[$qid] ?? [];
+
             $artistRows[] = [
                 'wikidata_id' => $qid,
                 'name' => $name,
                 'sort_name' => $sortName,
                 'artist_type' => $artistType,
                 'musicbrainz_id' => $basic['musicBrainzId'] ?? null,
+                'spotify_artist_id' => $artistLinkData['spotifyArtistId'] ?? null,
+                'apple_music_artist_id' => $artistLinkData['appleMusicArtistId'] ?? null,
+                'discogs_artist_id' => $artistLinkData['discogsArtistId'] ?? null,
                 'description' => $basic['artistDescription'] ?? null,
                 'official_website' => $basic['officialWebsite'] ?? null,
                 'image_commons' => $imageCommons,
@@ -341,6 +348,9 @@ class WikidataEnrichArtists extends WikidataJob
                 'sort_name',
                 'artist_type',
                 'musicbrainz_id',
+                'spotify_artist_id',
+                'apple_music_artist_id',
+                'discogs_artist_id',
                 'description',
                 'official_website',
                 'image_commons',

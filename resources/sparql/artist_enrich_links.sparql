@@ -9,6 +9,7 @@ SELECT
   ?youtubeChannel
   ?spotifyArtistId
   ?appleMusicArtistId
+  ?discogsArtistId
   ?deezerArtistId
   ?soundcloudId
   ?bandcampId
@@ -22,6 +23,7 @@ WHERE {
   OPTIONAL { ?artist wdt:P2397 ?youtubeChannel . }
   OPTIONAL { ?artist wdt:P1902 ?spotifyArtistId . }
   OPTIONAL { ?artist wdt:P2850 ?appleMusicArtistId . }
+  OPTIONAL { ?artist wdt:P1953 ?discogsArtistId . }
   OPTIONAL { ?artist wdt:P2722 ?deezerArtistId . }
   OPTIONAL { ?artist wdt:P3040 ?soundcloudId . }
   OPTIONAL { ?artist wdt:P3283 ?bandcampId . }

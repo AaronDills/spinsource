@@ -9,6 +9,8 @@ SELECT
   ?albumType
   ?publicationDate
   ?musicBrainzReleaseGroupId
+  ?spotifyAlbumId
+  ?appleMusicAlbumId
 WHERE {
   VALUES ?artist { {{values}} }
 
@@ -28,6 +30,8 @@ WHERE {
 
   OPTIONAL { ?album wdt:P577 ?publicationDate . }
   OPTIONAL { ?album wdt:P436 ?musicBrainzReleaseGroupId . }
+  OPTIONAL { ?album wdt:P2205 ?spotifyAlbumId . }
+  OPTIONAL { ?album wdt:P2281 ?appleMusicAlbumId . }
 
   SERVICE wikibase:label {
     bd:serviceParam wikibase:language "en,de,fr,es,it,pt,nl,*" .
