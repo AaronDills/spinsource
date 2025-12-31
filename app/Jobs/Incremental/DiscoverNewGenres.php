@@ -4,8 +4,8 @@ namespace App\Jobs\Incremental;
 
 use App\Jobs\WikidataJob;
 use App\Jobs\WikidataSeedGenres;
-use App\Models\IngestionCheckpoint;
 use App\Models\DataSourceQuery;
+use App\Models\IngestionCheckpoint;
 use Illuminate\Support\Facades\Log;
 
 /**

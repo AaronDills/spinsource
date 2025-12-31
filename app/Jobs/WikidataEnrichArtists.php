@@ -6,8 +6,8 @@ use App\Enums\ArtistLinkType;
 use App\Models\Artist;
 use App\Models\ArtistLink;
 use App\Models\Country;
-use App\Models\Genre;
 use App\Models\DataSourceQuery;
+use App\Models\Genre;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 

@@ -4,8 +4,8 @@ namespace App\Jobs\Incremental;
 
 use App\Jobs\WikidataJob;
 use App\Models\Country;
-use App\Models\Genre;
 use App\Models\DataSourceQuery;
+use App\Models\Genre;
 use Illuminate\Support\Facades\Log;
 
 /**

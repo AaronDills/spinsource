@@ -3,8 +3,8 @@
 namespace App\Jobs;
 
 use App\Models\Country;
-use App\Models\Genre;
 use App\Models\DataSourceQuery;
+use App\Models\Genre;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Log;
 

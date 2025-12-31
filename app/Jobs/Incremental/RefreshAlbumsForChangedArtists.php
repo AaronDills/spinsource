@@ -6,8 +6,8 @@ use App\Enums\AlbumType;
 use App\Jobs\WikidataJob;
 use App\Models\Album;
 use App\Models\Artist;
-use App\Models\IngestionCheckpoint;
 use App\Models\DataSourceQuery;
+use App\Models\IngestionCheckpoint;
 use Illuminate\Support\Facades\Log;
 
 /**

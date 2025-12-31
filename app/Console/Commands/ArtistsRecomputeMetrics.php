@@ -23,26 +23,26 @@ class ArtistsRecomputeMetrics extends Command
         $this->info('Computing album_count for all artists...');
 
         // Bulk update album_count using a single SQL statement
-        $albumCountUpdated = DB::statement("
+        $albumCountUpdated = DB::statement('
             UPDATE artists
             SET album_count = (
                 SELECT COUNT(*)
                 FROM albums
                 WHERE albums.artist_id = artists.id
             )
-        ");
+        ');
 
         $this->info('Computing link_count for all artists...');
 
         // Bulk update link_count using a single SQL statement
-        $linkCountUpdated = DB::statement("
+        $linkCountUpdated = DB::statement('
             UPDATE artists
             SET link_count = (
                 SELECT COUNT(*)
                 FROM artist_links
                 WHERE artist_links.artist_id = artists.id
             )
-        ");
+        ');
 
         $totalArtists = Artist::count();
         $this->info("Updated metrics for {$totalArtists} artists.");

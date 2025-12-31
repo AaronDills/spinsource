@@ -4,8 +4,8 @@ namespace App\Jobs\Incremental;
 
 use App\Jobs\WikidataEnrichArtists;
 use App\Jobs\WikidataJob;
-use App\Models\IngestionCheckpoint;
 use App\Models\DataSourceQuery;
+use App\Models\IngestionCheckpoint;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
