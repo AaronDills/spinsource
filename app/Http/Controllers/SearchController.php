@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\Artist;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\View\View;
 
 class SearchController extends Controller
 {
@@ -83,5 +84,30 @@ class SearchController extends Controller
         }
 
         return implode(' · ', $parts);
+    }
+
+    public function results(Request $request): View
+    {
+        $query = $request->input('q', '');
+
+        $artists = collect();
+        $albums = collect();
+
+        if (strlen($query) >= 2) {
+            $artists = Artist::search($query)
+                ->take(24)
+                ->get();
+
+            $albums = Album::search($query)
+                ->take(24)
+                ->get()
+                ->load('artist');
+        }
+
+        return view('search.results', [
+            'query' => $query,
+            'artists' => $artists,
+            'albums' => $albums,
+        ]);
     }
 }

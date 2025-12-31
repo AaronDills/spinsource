@@ -13,22 +13,33 @@
             </h1>
 
             <div x-data="searchAutocomplete" class="relative">
-                <input
-                    type="text"
-                    x-model="query"
-                    @input.debounce.300ms="search"
-                    @focus="open = results.length > 0"
-                    @click.away="open = false"
-                    @keydown.escape="open = false"
-                    @keydown.arrow-down.prevent="highlightNext"
-                    @keydown.arrow-up.prevent="highlightPrev"
-                    @keydown.enter.prevent="selectHighlighted"
-                    placeholder="Search artists and albums..."
-                    class="w-full px-4 py-3 text-lg rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
+                <form :action="'/search-results?q=' + encodeURIComponent(query)" method="GET" @submit.prevent="submitSearch" class="flex gap-2">
+                    <input
+                        type="text"
+                        x-model="query"
+                        @input.debounce.300ms="search"
+                        @focus="open = results.length > 0"
+                        @keydown.escape="open = false"
+                        @keydown.arrow-down.prevent="highlightNext"
+                        @keydown.arrow-up.prevent="highlightPrev"
+                        @keydown.enter.prevent="handleEnter"
+                        placeholder="Search artists and albums..."
+                        class="flex-1 px-4 py-3 text-lg rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                    <button
+                        type="submit"
+                        :disabled="query.length < 2"
+                        class="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </button>
+                </form>
 
                 <div
                     x-show="open && results.length > 0"
+                    @click.away="open = false"
                     x-transition:enter="transition ease-out duration-100"
                     x-transition:enter-start="opacity-0 scale-95"
                     x-transition:enter-end="opacity-100 scale-100"

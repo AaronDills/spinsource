@@ -47,7 +47,16 @@ class ArtistController extends Controller
         foreach ($typeOrder as $type => $label) {
             $typeAlbums = $albums
                 ->where('album_type', $type)
-                ->sortByDesc('release_year');
+                ->sortByDesc(function ($album) {
+                    // Sort by release_date if available, otherwise release_year
+                    // Nulls sort to the end (use 0 as fallback)
+                    if ($album->release_date) {
+                        return $album->release_date->timestamp;
+                    }
+
+                    return $album->release_year ?? 0;
+                })
+                ->values();
 
             if ($typeAlbums->isNotEmpty()) {
                 $grouped[] = [

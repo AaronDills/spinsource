@@ -17,18 +17,18 @@
 
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <div class="p-6 sm:p-8">
-                    <div class="flex items-start gap-6">
+                    <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
                         @if($artist->image_commons)
                             <img src="https://commons.wikimedia.org/wiki/Special:FilePath/{{ rawurlencode($artist->image_commons) }}?width=300"
                                  alt="{{ $artist->name }}"
-                                 class="flex-shrink-0 w-32 h-32 object-cover rounded-lg bg-gray-200 dark:bg-gray-700">
+                                 class="flex-shrink-0 w-28 h-28 sm:w-32 sm:h-32 object-cover rounded-lg bg-gray-200 dark:bg-gray-700">
                         @else
-                            <div class="flex-shrink-0 w-32 h-32 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                                <span class="text-6xl">🎤</span>
+                            <div class="flex-shrink-0 w-28 h-28 sm:w-32 sm:h-32 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                                <span class="text-5xl sm:text-6xl">🎤</span>
                             </div>
                         @endif
-                        <div class="flex-1 min-w-0">
-                            <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                        <div class="flex-1 min-w-0 text-center sm:text-left">
+                            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
                                 {{ $artist->name }}
                             </h1>
                             @if($artist->genres->count() > 0)
@@ -36,7 +36,7 @@
                                     {{ $artist->genres->pluck('name')->join(', ') }}
                                 </p>
                             @endif
-                            <div class="flex flex-wrap gap-2">
+                            <div class="flex flex-wrap justify-center sm:justify-start gap-2">
                                 @if($artist->country)
                                     <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                                         {{ $artist->country->name }}

@@ -41,6 +41,7 @@ class Kernel extends ConsoleKernel
         */
         $schedule->call(fn () => DiscoverNewGenres::dispatch())
             ->weeklyOn(0, '02:00') // Sunday at 2:00 AM
+            ->name('wikidata:weekly-sync')
             ->onOneServer()
             ->withoutOverlapping()
             ->then(fn () => DiscoverChangedGenres::dispatch())

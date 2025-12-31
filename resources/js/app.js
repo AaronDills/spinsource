@@ -59,6 +59,20 @@ Alpine.data('searchAutocomplete', () => ({
         if (this.highlighted >= 0 && this.highlighted < this.results.length) {
             this.selectResult(this.results[this.highlighted]);
         }
+    },
+
+    handleEnter() {
+        if (this.highlighted >= 0 && this.highlighted < this.results.length) {
+            this.selectResult(this.results[this.highlighted]);
+        } else {
+            this.submitSearch();
+        }
+    },
+
+    submitSearch() {
+        if (this.query.length >= 2) {
+            window.location.href = '/search-results?q=' + encodeURIComponent(this.query);
+        }
     }
 }));
 

@@ -11,6 +11,7 @@ Route::get('/', function () {
 });
 
 Route::get('/search', [SearchController::class, 'search'])->name('search');
+Route::get('/search-results', [SearchController::class, 'results'])->name('search.results');
 Route::get('/album/{album}', [AlbumController::class, 'show'])->name('album.show');
 Route::get('/artist/{artist}', [ArtistController::class, 'show'])->name('artist.show');
 
