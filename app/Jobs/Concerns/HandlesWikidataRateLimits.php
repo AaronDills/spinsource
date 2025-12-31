@@ -21,17 +21,17 @@ trait HandlesWikidataRateLimits
         $ua = config('wikidata.user_agent');
 
         $response = Http::withHeaders([
-                'Accept'          => 'application/sparql-results+json',
-                'User-Agent'      => $ua,
-                'Accept-Encoding' => 'gzip',
-                'Content-Type'    => 'application/x-www-form-urlencoded',
-            ])
+            'Accept' => 'application/sparql-results+json',
+            'User-Agent' => $ua,
+            'Accept-Encoding' => 'gzip',
+            'Content-Type' => 'application/x-www-form-urlencoded',
+        ])
             ->connectTimeout(10)
             ->timeout(120)
             ->asForm()
             ->post($endpoint, [
                 'format' => 'json',
-                'query'  => $sparql,
+                'query' => $sparql,
             ]);
 
         // Handle 429 Too Many Requests without throwing
@@ -39,11 +39,12 @@ trait HandlesWikidataRateLimits
             $delay = $this->computeRetryDelay($response);
 
             Log::warning('Wikidata WDQS rate limited (429), releasing job', [
-                'job'   => static::class,
+                'job' => static::class,
                 'delay' => $delay,
             ]);
 
             $this->release($delay);
+
             return null;
         }
 
@@ -53,11 +54,12 @@ trait HandlesWikidataRateLimits
             $delay += (int) ($delay * mt_rand(0, 30) / 100);
 
             Log::warning('Wikidata WDQS blocked (403), releasing job with long delay', [
-                'job'   => static::class,
+                'job' => static::class,
                 'delay' => $delay,
             ]);
 
             $this->release($delay);
+
             return null;
         }
 
@@ -68,11 +70,12 @@ trait HandlesWikidataRateLimits
             $delay += (int) ($delay * mt_rand(0, 30) / 100);
 
             Log::warning('Wikidata WDQS timeout (504), releasing job', [
-                'job'   => static::class,
+                'job' => static::class,
                 'delay' => $delay,
             ]);
 
             $this->release($delay);
+
             return null;
         }
 

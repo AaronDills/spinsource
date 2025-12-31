@@ -18,20 +18,20 @@ enum ArtistLinkType: string
     case BANDCAMP = 'bandcamp';
     case SOUNDCLOUD = 'soundcloud';
     case APPLE_MUSIC = 'apple_music';
-    case DEEZER = 'deezer';         
+    case DEEZER = 'deezer';
     case REDDIT = 'reddit';
 
     public static function fromWikidataProperty(string $property): ?self
     {
         return match ($property) {
-            'P856'  => self::WEBSITE,
+            'P856' => self::WEBSITE,
             'P2002' => self::TWITTER,
             'P2003' => self::INSTAGRAM,
             'P2013' => self::FACEBOOK,
             'P2397' => self::YOUTUBE,
             'P1902' => self::SPOTIFY,
             'P2850' => self::APPLE_MUSIC,
-            'P2722' => self::DEEZER,   
+            'P2722' => self::DEEZER,
             'P3283' => self::BANDCAMP,
             'P3040' => self::SOUNDCLOUD,
             'P3984' => self::REDDIT,
@@ -39,4 +39,3 @@ enum ArtistLinkType: string
         };
     }
 }
-

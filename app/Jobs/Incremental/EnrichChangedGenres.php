@@ -46,6 +46,7 @@ class EnrichChangedGenres extends WikidataJob
 
         if (empty($bindings)) {
             Log::info('Incremental: No genre data returned');
+
             return;
         }
 
@@ -54,15 +55,17 @@ class EnrichChangedGenres extends WikidataJob
 
         foreach ($bindings as $row) {
             $genreQid = $this->qidFromEntityUrl(data_get($row, 'genre.value'));
-            if (! $genreQid) continue;
+            if (! $genreQid) {
+                continue;
+            }
 
-            $name        = data_get($row, 'genreLabel.value');
+            $name = data_get($row, 'genreLabel.value');
             $description = data_get($row, 'genreDescription.value');
-            $mbid        = data_get($row, 'musicBrainzId.value');
-            $inception   = $this->extractYear(data_get($row, 'inception.value'));
+            $mbid = data_get($row, 'musicBrainzId.value');
+            $inception = $this->extractYear(data_get($row, 'inception.value'));
 
-            $countryId   = null;
-            $countryQid  = $this->qidFromEntityUrl(data_get($row, 'country.value'));
+            $countryId = null;
+            $countryQid = $this->qidFromEntityUrl(data_get($row, 'country.value'));
             $countryName = data_get($row, 'countryLabel.value');
 
             if ($countryQid && $countryName) {
@@ -79,11 +82,11 @@ class EnrichChangedGenres extends WikidataJob
             }
 
             $payload = [
-                'name'           => $name ?: null,
-                'description'    => $description ?: null,
+                'name' => $name ?: null,
+                'description' => $description ?: null,
                 'musicbrainz_id' => $mbid ?: null,
                 'inception_year' => $inception,
-                'country_id'     => $countryId,
+                'country_id' => $countryId,
             ];
 
             Genre::updateOrCreate(['wikidata_id' => $genreQid], array_filter(
@@ -94,19 +97,19 @@ class EnrichChangedGenres extends WikidataJob
             $upserted++;
         }
 
-        if (!empty($pendingParents)) {
+        if (! empty($pendingParents)) {
             $this->resolveParents($pendingParents);
         }
 
         Log::info('Incremental: Changed genres enriched', [
             'requested' => count($this->genreQids),
-            'upserted'  => $upserted,
+            'upserted' => $upserted,
         ]);
     }
 
     private function resolveParents(array $pendingParents): void
     {
-        $childQids  = array_keys($pendingParents);
+        $childQids = array_keys($pendingParents);
         $parentQids = array_values($pendingParents);
 
         $genres = Genre::query()
@@ -115,10 +118,12 @@ class EnrichChangedGenres extends WikidataJob
             ->keyBy('wikidata_id');
 
         foreach ($pendingParents as $childQid => $parentQid) {
-            $child  = $genres->get($childQid);
+            $child = $genres->get($childQid);
             $parent = $genres->get($parentQid);
 
-            if (! $child || ! $parent) continue;
+            if (! $child || ! $parent) {
+                continue;
+            }
 
             if ($child->parent_genre_id !== $parent->id) {
                 $child->parent_genre_id = $parent->id;

@@ -35,19 +35,20 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             $qids = $checkpoint->getMeta('changed_artist_qids', []);
 
             // Clear the meta after reading
-            if (!empty($qids)) {
+            if (! empty($qids)) {
                 $checkpoint->setMeta('changed_artist_qids', []);
             }
         }
 
         if (empty($qids)) {
             Log::info('Incremental: No changed artists for album refresh');
+
             return;
         }
 
         Log::info('Incremental: Refresh albums for changed artists start', [
             'artistQids' => count($qids),
-            'chunkSize'  => $this->chunkSize,
+            'chunkSize' => $this->chunkSize,
         ]);
 
         // Process in chunks to avoid huge SPARQL queries
@@ -77,6 +78,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
 
         if ($artists->isEmpty()) {
             Log::info('Incremental: No local artists found for chunk');
+
             return;
         }
 
@@ -101,6 +103,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             Log::info('Incremental: No albums found for artist chunk', [
                 'artistCount' => count($qidsInDb),
             ]);
+
             return;
         }
 
@@ -113,10 +116,14 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
 
         foreach ($bindings as $row) {
             $albumQid = $this->qidFromEntityUrl(data_get($row, 'album.value'));
-            if (! $albumQid) continue;
+            if (! $albumQid) {
+                continue;
+            }
 
             $artistQid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
-            if (! $artistQid || ! isset($artistQidToId[$artistQid])) continue;
+            if (! $artistQid || ! isset($artistQidToId[$artistQid])) {
+                continue;
+            }
 
             $byAlbum[$albumQid] ??= [
                 'wikidata_id' => $albumQid,
@@ -130,7 +137,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
 
             $title = data_get($row, 'albumLabel.value');
             // Skip albums that still have Q-ID as title (no label in Wikidata)
-            if ($title && !preg_match('/^Q\d+$/', $title)) {
+            if ($title && ! preg_match('/^Q\d+$/', $title)) {
                 $byAlbum[$albumQid]['title'] = $byAlbum[$albumQid]['title'] ?? $title;
             }
             $byAlbum[$albumQid]['description'] = $byAlbum[$albumQid]['description'] ?? data_get($row, 'albumDescription.value');
@@ -146,6 +153,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
         foreach ($byAlbum as $data) {
             if (! $data['title']) {
                 $skippedNoTitle++;
+
                 continue;
             }
 

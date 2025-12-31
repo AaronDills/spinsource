@@ -27,14 +27,15 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
     {
         // Prevent accidental duplicate page processing
         $cursor = $this->afterOid ?? 'START';
+
         return "wikidata:genres:after:{$cursor}:size:{$this->pageSize}";
     }
 
     public function handle(): void
     {
         Log::info('Wikidata genre seed page start', [
-            'afterOid'  => $this->afterOid,
-            'pageSize'  => $this->pageSize,
+            'afterOid' => $this->afterOid,
+            'pageSize' => $this->pageSize,
         ]);
 
         $afterFilter = '';
@@ -43,7 +44,7 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
         }
 
         $sparql = Sparql::load('genres', [
-            'limit'        => $this->pageSize,
+            'limit' => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);
 
@@ -62,6 +63,7 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
                 'afterOid' => $this->afterOid,
                 'pageSize' => $this->pageSize,
             ]);
+
             return;
         }
 
@@ -69,15 +71,17 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
 
         foreach ($bindings as $row) {
             $genreQid = $this->qidFromEntityUrl(data_get($row, 'genre.value'));
-            if (! $genreQid) continue;
+            if (! $genreQid) {
+                continue;
+            }
 
-            $name        = data_get($row, 'genreLabel.value');
+            $name = data_get($row, 'genreLabel.value');
             $description = data_get($row, 'genreDescription.value');
-            $mbid        = data_get($row, 'musicBrainzId.value');
-            $inception   = $this->extractYear(data_get($row, 'inception.value'));
+            $mbid = data_get($row, 'musicBrainzId.value');
+            $inception = $this->extractYear(data_get($row, 'inception.value'));
 
-            $countryId   = null;
-            $countryQid  = $this->qidFromEntityUrl(data_get($row, 'country.value'));
+            $countryId = null;
+            $countryQid = $this->qidFromEntityUrl(data_get($row, 'country.value'));
             $countryName = data_get($row, 'countryLabel.value');
 
             if ($countryQid && $countryName) {
@@ -95,11 +99,11 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
 
             // Keep name nullable handling explicit (optional but clearer than array_filter magic)
             $payload = [
-                'name'           => $name ?: null,
-                'description'    => $description ?: null,
+                'name' => $name ?: null,
+                'description' => $description ?: null,
                 'musicbrainz_id' => $mbid ?: null,
                 'inception_year' => $inception,
-                'country_id'     => $countryId,
+                'country_id' => $countryId,
             ];
 
             Genre::updateOrCreate(['wikidata_id' => $genreQid], array_filter(
@@ -108,7 +112,7 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
             ));
         }
 
-        if (!empty($pendingParents)) {
+        if (! empty($pendingParents)) {
             $this->resolveParents($pendingParents);
         }
 
@@ -116,33 +120,33 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
         $nextAfterOid = (int) data_get($bindings[$count - 1], 'oid.value');
 
         Log::info('Wikidata genre seed page done', [
-            'afterOid'     => $this->afterOid,
-            'pageSize'     => $this->pageSize,
-            'count'        => $count,
+            'afterOid' => $this->afterOid,
+            'pageSize' => $this->pageSize,
+            'count' => $count,
             'nextAfterOid' => $nextAfterOid,
         ]);
 
         // If we got a full page and have a valid cursor, enqueue next page (unless single-page mode)
-        if ($count === $this->pageSize && $nextAfterOid > 0 && !$this->singlePage) {
+        if ($count === $this->pageSize && $nextAfterOid > 0 && ! $this->singlePage) {
             usleep(250_000);
 
             self::dispatch($nextAfterOid, $this->pageSize, false);
 
             Log::info('Enqueued next Wikidata genre seed page', [
                 'nextAfterOid' => $nextAfterOid,
-                'pageSize'     => $this->pageSize,
+                'pageSize' => $this->pageSize,
             ]);
         } elseif ($this->singlePage) {
             Log::info('Single-page mode: stopping after first page', [
                 'afterOid' => $this->afterOid,
-                'count'    => $count,
+                'count' => $count,
             ]);
         }
     }
 
     private function resolveParents(array $pendingParents): void
     {
-        $childQids  = array_keys($pendingParents);
+        $childQids = array_keys($pendingParents);
         $parentQids = array_values($pendingParents);
 
         $genres = Genre::query()
@@ -151,10 +155,12 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
             ->keyBy('wikidata_id');
 
         foreach ($pendingParents as $childQid => $parentQid) {
-            $child  = $genres->get($childQid);
+            $child = $genres->get($childQid);
             $parent = $genres->get($parentQid);
 
-            if (! $child || ! $parent) continue;
+            if (! $child || ! $parent) {
+                continue;
+            }
 
             if ($child->parent_genre_id !== $parent->id) {
                 $child->parent_genre_id = $parent->id;

@@ -17,13 +17,14 @@ class WikidataDispatchSeedGenres extends Command
 
     public function handle(): int
     {
-        $pageSize   = max(25, min(2000, (int) $this->option('page-size')));
-        $afterOid   = $this->option('after-oid');
+        $pageSize = max(25, min(2000, (int) $this->option('page-size')));
+        $afterOid = $this->option('after-oid');
         $singlePage = $this->option('single-page');
 
         if ($afterOid !== null) {
             if (! ctype_digit($afterOid) || (int) $afterOid <= 0) {
                 $this->error('Invalid --after-oid. Must be a positive integer (e.g. 12345 for Q12345).');
+
                 return self::FAILURE;
             }
             $afterOid = (int) $afterOid;
@@ -36,8 +37,8 @@ class WikidataDispatchSeedGenres extends Command
         WikidataSeedGenres::dispatch($afterOid, $pageSize, $singlePage);
 
         Log::info('Dispatched Wikidata genre seeding (backfill)', [
-            'afterOid'   => $afterOid,
-            'pageSize'   => $pageSize,
+            'afterOid' => $afterOid,
+            'pageSize' => $pageSize,
             'singlePage' => $singlePage,
         ]);
 

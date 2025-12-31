@@ -4,13 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Scout\Searchable;
 
 class Artist extends Model
 {
     use Searchable;
+
     protected $fillable = [
         'name',
         'sort_name',
@@ -36,12 +36,11 @@ class Artist extends Model
     {
         return $this->belongsToMany(\App\Models\Genre::class, 'artist_genre')->withTimestamps();
     }
-    
+
     public function links()
     {
         return $this->hasMany(\App\Models\ArtistLink::class);
     }
-    
 
     public function albums(): HasMany
     {
@@ -57,5 +56,4 @@ class Artist extends Model
             'description' => $this->description,
         ];
     }
-
 }

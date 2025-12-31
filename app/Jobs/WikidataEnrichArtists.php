@@ -45,7 +45,7 @@ class WikidataEnrichArtists extends WikidataJob
         }
 
         Log::info('Wikidata artist enrich batch start (split queries)', [
-            'count'  => count($artistQids),
+            'count' => count($artistQids),
             'sample' => array_slice($artistQids, 0, 5),
         ]);
 
@@ -97,10 +97,14 @@ class WikidataEnrichArtists extends WikidataJob
         $result = [];
         foreach ($bindings as $row) {
             $qid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
-            if (!$qid) continue;
+            if (! $qid) {
+                continue;
+            }
 
             // Skip if already processed (shouldn't happen with optimized query)
-            if (isset($result[$qid])) continue;
+            if (isset($result[$qid])) {
+                continue;
+            }
 
             // isHuman is a boolean from BIND(EXISTS {...})
             $isHuman = data_get($row, 'isHuman.value') === 'true';
@@ -147,7 +151,7 @@ class WikidataEnrichArtists extends WikidataJob
             $genreQid = $this->qidFromEntityUrl(data_get($row, 'genre.value'));
 
             if ($artistQid && $genreQid) {
-                if (!isset($result[$artistQid])) {
+                if (! isset($result[$artistQid])) {
                     $result[$artistQid] = [];
                 }
                 $result[$artistQid][] = $genreQid;
@@ -180,9 +184,11 @@ class WikidataEnrichArtists extends WikidataJob
         $result = [];
         foreach ($bindings as $row) {
             $qid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
-            if (!$qid) continue;
+            if (! $qid) {
+                continue;
+            }
 
-            if (!isset($result[$qid])) {
+            if (! isset($result[$qid])) {
                 $result[$qid] = [
                     'twitter' => null,
                     'instagram' => null,
@@ -223,7 +229,9 @@ class WikidataEnrichArtists extends WikidataJob
 
         foreach ($artistQids as $qid) {
             $basic = $basicData[$qid] ?? null;
-            if (!$basic) continue;
+            if (! $basic) {
+                continue;
+            }
 
             $name = $basic['artistLabel'] ?: $qid;
 
@@ -238,7 +246,7 @@ class WikidataEnrichArtists extends WikidataJob
             $countryQid = $basic['country'];
             $countryName = $basic['countryLabel'];
 
-            if ($countryQid && $countryName && !preg_match('/^Q\d+$/', $countryName)) {
+            if ($countryQid && $countryName && ! preg_match('/^Q\d+$/', $countryName)) {
                 $countriesToUpsert[$countryQid] = $countryName;
             }
 
@@ -256,21 +264,21 @@ class WikidataEnrichArtists extends WikidataJob
             $logoCommons = $this->commonsFilename($basic['logoCommons'] ?? null);
 
             $artistRows[] = [
-                'wikidata_id'      => $qid,
-                'name'             => $name,
-                'sort_name'        => $sortName,
-                'artist_type'      => $artistType,
-                'musicbrainz_id'   => $basic['musicBrainzId'] ?? null,
-                'description'      => $basic['artistDescription'] ?? null,
+                'wikidata_id' => $qid,
+                'name' => $name,
+                'sort_name' => $sortName,
+                'artist_type' => $artistType,
+                'musicbrainz_id' => $basic['musicBrainzId'] ?? null,
+                'description' => $basic['artistDescription'] ?? null,
                 'official_website' => $basic['officialWebsite'] ?? null,
-                'image_commons'    => $imageCommons,
-                'logo_commons'     => $logoCommons,
+                'image_commons' => $imageCommons,
+                'logo_commons' => $logoCommons,
                 'commons_category' => $basic['commonsCategory'] ?? null,
-                'formed_year'      => $formedYear,
-                'disbanded_year'   => $disbandedYear,
-                '__country_qid'    => $countryQid,
-                'created_at'       => $now,
-                'updated_at'       => $now,
+                'formed_year' => $formedYear,
+                'disbanded_year' => $disbandedYear,
+                '__country_qid' => $countryQid,
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
 
             // Genres from separate query
@@ -282,8 +290,8 @@ class WikidataEnrichArtists extends WikidataJob
 
             $artistMeta[$qid] = [
                 'countryQid' => $countryQid,
-                'genreQids'  => $genreQids,
-                'links'      => $links,
+                'genreQids' => $genreQids,
+                'links' => $links,
             ];
         }
 
@@ -291,24 +299,25 @@ class WikidataEnrichArtists extends WikidataJob
             Log::info('Wikidata artist enrich batch done (no valid data)', [
                 'count' => count($artistQids),
             ]);
+
             return;
         }
 
         // Upsert Countries in bulk
-        if (!empty($countriesToUpsert)) {
+        if (! empty($countriesToUpsert)) {
             $countryRows = [];
             foreach ($countriesToUpsert as $cqid => $nm) {
                 $countryRows[] = [
                     'wikidata_id' => $cqid,
-                    'name'        => $nm,
-                    'created_at'  => $now,
-                    'updated_at'  => $now,
+                    'name' => $nm,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ];
             }
             Country::upsert($countryRows, ['wikidata_id'], ['name', 'updated_at']);
         }
 
-        $countriesByQid = !empty($countriesToUpsert)
+        $countriesByQid = ! empty($countriesToUpsert)
             ? Country::query()
                 ->whereIn('wikidata_id', array_keys($countriesToUpsert))
                 ->get(['id', 'wikidata_id'])
@@ -352,7 +361,7 @@ class WikidataEnrichArtists extends WikidataJob
 
         // Map genres
         $allGenreQids = array_values(array_unique($allGenreQids));
-        $genresByQid = !empty($allGenreQids)
+        $genresByQid = ! empty($allGenreQids)
             ? Genre::query()->whereIn('wikidata_id', $allGenreQids)->get(['id', 'wikidata_id'])->keyBy('wikidata_id')
             : collect();
 
@@ -362,15 +371,19 @@ class WikidataEnrichArtists extends WikidataJob
 
         foreach ($artistMeta as $qid => $meta) {
             $artist = $artistsByQid->get($qid);
-            if (!$artist) continue;
+            if (! $artist) {
+                continue;
+            }
 
             foreach ($meta['genreQids'] as $gqid) {
                 $genre = $genresByQid->get($gqid);
-                if (!$genre) continue;
+                if (! $genre) {
+                    continue;
+                }
 
                 $pivotRows[] = [
-                    'artist_id'  => $artist->id,
-                    'genre_id'   => $genre->id,
+                    'artist_id' => $artist->id,
+                    'genre_id' => $genre->id,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
@@ -378,35 +391,37 @@ class WikidataEnrichArtists extends WikidataJob
 
             foreach ($meta['links'] as $lnk) {
                 $url = $this->normalizeUrl($lnk['url']);
-                if (!$url) continue;
+                if (! $url) {
+                    continue;
+                }
 
                 $linkRows[] = [
-                    'artist_id'   => $artist->id,
-                    'type'        => $lnk['type'],
-                    'url'         => $url,
-                    'source'      => 'wikidata',
+                    'artist_id' => $artist->id,
+                    'type' => $lnk['type'],
+                    'url' => $url,
+                    'source' => 'wikidata',
                     'is_official' => (bool) $lnk['is_official'],
-                    'created_at'  => $now,
-                    'updated_at'  => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ];
             }
         }
 
         $pivotInserted = 0;
-        if (!empty($pivotRows)) {
+        if (! empty($pivotRows)) {
             $pivotInserted = DB::table('artist_genre')->insertOrIgnore($pivotRows);
         }
 
         $linksInserted = 0;
-        if (!empty($linkRows)) {
+        if (! empty($linkRows)) {
             $linksInserted = ArtistLink::insertOrIgnore($linkRows);
         }
 
         Log::info('Wikidata artist enrich batch done (split queries)', [
-            'requested'       => count($artistQids),
+            'requested' => count($artistQids),
             'artistsUpserted' => count($artistRows),
-            'pivotInserted'   => $pivotInserted,
-            'linksInserted'   => $linksInserted,
+            'pivotInserted' => $pivotInserted,
+            'linksInserted' => $linksInserted,
         ]);
     }
 
@@ -418,14 +433,20 @@ class WikidataEnrichArtists extends WikidataJob
     private function computeSortName(?string $displayName, ?string $givenName, ?string $familyName): ?string
     {
         $displayName = $displayName ? trim($displayName) : null;
-        if (!$displayName) return null;
+        if (! $displayName) {
+            return null;
+        }
 
         $givenName = $givenName ? trim($givenName) : null;
         $familyName = $familyName ? trim($familyName) : null;
 
         // Skip Q-ID labels that leaked through
-        if ($givenName && preg_match('/^Q\d+$/', $givenName)) $givenName = null;
-        if ($familyName && preg_match('/^Q\d+$/', $familyName)) $familyName = null;
+        if ($givenName && preg_match('/^Q\d+$/', $givenName)) {
+            $givenName = null;
+        }
+        if ($familyName && preg_match('/^Q\d+$/', $familyName)) {
+            $familyName = null;
+        }
 
         // If we have family name, format as "Family, Given"
         if ($familyName) {
@@ -443,7 +464,9 @@ class WikidataEnrichArtists extends WikidataJob
 
     private function commonsFilename(?string $value): ?string
     {
-        if (!$value) return null;
+        if (! $value) {
+            return null;
+        }
 
         $value = trim($value);
 
@@ -451,19 +474,29 @@ class WikidataEnrichArtists extends WikidataJob
             $value = substr($value, strrpos($value, 'Special:FilePath/') + strlen('Special:FilePath/'));
         } else {
             $slash = strrpos($value, '/');
-            if ($slash !== false) $value = substr($value, $slash + 1);
+            if ($slash !== false) {
+                $value = substr($value, $slash + 1);
+            }
         }
 
         $value = urldecode($value);
+
         return $value !== '' ? $value : null;
     }
 
     private function normalizeUrl(?string $url): ?string
     {
-        if (!$url) return null;
+        if (! $url) {
+            return null;
+        }
         $url = trim($url);
-        if ($url === '') return null;
-        if (!preg_match('#^https?://#i', $url)) return null;
+        if ($url === '') {
+            return null;
+        }
+        if (! preg_match('#^https?://#i', $url)) {
+            return null;
+        }
+
         return $url;
     }
 

@@ -66,12 +66,12 @@ abstract class WikidataJob implements ShouldQueue
     /**
      * Extract Q-ID from Wikidata entity URL.
      *
-     * @param string|null $url e.g., "http://www.wikidata.org/entity/Q123"
+     * @param  string|null  $url  e.g., "http://www.wikidata.org/entity/Q123"
      * @return string|null e.g., "Q123"
      */
     protected function qidFromEntityUrl(?string $url): ?string
     {
-        if (!$url) {
+        if (! $url) {
             return null;
         }
 
@@ -92,13 +92,10 @@ abstract class WikidataJob implements ShouldQueue
      * - Full ISO dates: "+2023-01-15T00:00:00Z"
      * - Year-only: "+2023"
      * - Malformed dates
-     *
-     * @param string|null $dateValue
-     * @return int|null
      */
     protected function extractYear(?string $dateValue): ?int
     {
-        if (!$dateValue) {
+        if (! $dateValue) {
             return null;
         }
 
@@ -119,13 +116,10 @@ abstract class WikidataJob implements ShouldQueue
 
     /**
      * Parse a date value into a Carbon instance.
-     *
-     * @param string|null $dateValue
-     * @return Carbon|null
      */
     protected function parseDate(?string $dateValue): ?Carbon
     {
-        if (!$dateValue) {
+        if (! $dateValue) {
             return null;
         }
 

@@ -27,8 +27,8 @@ class DiscoverNewArtistIds extends WikidataJob
         $afterOid = $checkpoint->last_seen_oid;
 
         Log::info('Incremental: Discover new artist IDs start', [
-            'afterOid'  => $afterOid,
-            'pageSize'  => $this->pageSize,
+            'afterOid' => $afterOid,
+            'pageSize' => $this->pageSize,
             'batchSize' => $this->batchSize,
         ]);
 
@@ -38,7 +38,7 @@ class DiscoverNewArtistIds extends WikidataJob
         }
 
         $sparql = Sparql::load('incremental/new_artists', [
-            'limit'        => $this->pageSize,
+            'limit' => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);
 
@@ -55,6 +55,7 @@ class DiscoverNewArtistIds extends WikidataJob
             Log::info('Incremental: No new artists found', [
                 'afterOid' => $afterOid,
             ]);
+
             return;
         }
 
@@ -76,10 +77,10 @@ class DiscoverNewArtistIds extends WikidataJob
         $qids = array_values(array_unique($qids));
 
         Log::info('Incremental: New artist IDs discovered', [
-            'afterOid'     => $afterOid,
-            'count'        => $count,
-            'uniqueQids'   => count($qids),
-            'maxOid'       => $maxOid,
+            'afterOid' => $afterOid,
+            'count' => $count,
+            'uniqueQids' => count($qids),
+            'maxOid' => $maxOid,
         ]);
 
         // Dispatch enrichment jobs in batches

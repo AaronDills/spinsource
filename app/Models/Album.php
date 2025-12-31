@@ -10,6 +10,7 @@ use Laravel\Scout\Searchable;
 class Album extends Model
 {
     use Searchable;
+
     protected $fillable = [
         'title',
         'wikidata_id',
@@ -52,5 +53,4 @@ class Album extends Model
             'artist_name' => $this->artist?->name,
         ];
     }
-
 }

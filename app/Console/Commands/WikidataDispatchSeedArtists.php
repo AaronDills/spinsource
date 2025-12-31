@@ -18,14 +18,15 @@ class WikidataDispatchSeedArtists extends Command
 
     public function handle(): int
     {
-        $pageSize   = max(50, min(5000, (int) $this->option('page-size')));
-        $batchSize  = max(10, min(500, (int) $this->option('batch-size')));
-        $afterOid   = $this->option('after-oid');
+        $pageSize = max(50, min(5000, (int) $this->option('page-size')));
+        $batchSize = max(10, min(500, (int) $this->option('batch-size')));
+        $afterOid = $this->option('after-oid');
         $singlePage = $this->option('single-page');
 
         if ($afterOid !== null) {
             if (! ctype_digit($afterOid) || (int) $afterOid <= 0) {
                 $this->error('Invalid --after-oid. Must be a positive integer (e.g. 12345 for Q12345).');
+
                 return self::FAILURE;
             }
             $afterOid = (int) $afterOid;
@@ -38,9 +39,9 @@ class WikidataDispatchSeedArtists extends Command
         WikidataSeedArtistIds::dispatch($afterOid, $pageSize, $batchSize, $singlePage);
 
         Log::info('Dispatched Wikidata artist seeding (backfill)', [
-            'afterOid'   => $afterOid,
-            'pageSize'   => $pageSize,
-            'batchSize'  => $batchSize,
+            'afterOid' => $afterOid,
+            'pageSize' => $pageSize,
+            'batchSize' => $batchSize,
             'singlePage' => $singlePage,
         ]);
 

@@ -39,6 +39,7 @@ Use --only=<step> to run a single step manually.';
 
         if (! $this->option('force') && ! $lock->get()) {
             $this->warn('Another wikidata:sync is already running. Exiting.');
+
             return self::SUCCESS;
         }
 
@@ -50,7 +51,8 @@ Use --only=<step> to run a single step manually.';
             $sequential = $this->option('sequential');
 
             if ($only && ! in_array($only, ['genres', 'artists', 'albums'])) {
-                $this->error("Invalid --only value. Must be: genres, artists, or albums");
+                $this->error('Invalid --only value. Must be: genres, artists, or albums');
+
                 return self::FAILURE;
             }
 
@@ -83,15 +85,15 @@ Use --only=<step> to run a single step manually.';
                 'artists' => [
                     'cmd' => 'wikidata:dispatch-seed-artists',
                     'args' => array_filter([
-                        '--page-size'  => $pageSize,
+                        '--page-size' => $pageSize,
                         '--batch-size' => $artistBatchSize,
-                        '--after-oid'  => $this->option('artists-after-oid') ?: null,
+                        '--after-oid' => $this->option('artists-after-oid') ?: null,
                     ], fn ($v) => $v !== null),
                 ],
                 'albums' => [
                     'cmd' => 'wikidata:dispatch-seed-albums',
                     'args' => array_filter([
-                        '--after-artist-id'   => $albumsAfterArtistId,
+                        '--after-artist-id' => $albumsAfterArtistId,
                         '--artist-batch-size' => $albumArtistBatchSize,
                     ], fn ($v) => $v !== null),
                 ],
@@ -106,14 +108,15 @@ Use --only=<step> to run a single step manually.';
             $lastStep = end($stepNames);
 
             foreach ($steps as $name => $step) {
-                $cmd  = $step['cmd'];
+                $cmd = $step['cmd'];
                 $args = $step['args'] ?? [];
 
-                $this->line("→ [{$name}] Dispatching: {$cmd}" . ($args ? ' ' . json_encode($args) : ''));
+                $this->line("→ [{$name}] Dispatching: {$cmd}".($args ? ' '.json_encode($args) : ''));
                 $exit = Artisan::call($cmd, $args, $this->output);
 
                 if ($exit !== self::SUCCESS) {
                     $this->error("Command failed: {$cmd}");
+
                     return $exit;
                 }
 
@@ -165,6 +168,7 @@ Use --only=<step> to run a single step manually.';
                     break;
                 }
                 sleep(2);
+
                 continue;
             }
 
@@ -178,7 +182,7 @@ Use --only=<step> to run a single step manually.';
             sleep(5);
         }
 
-        $this->output->write("\r" . str_repeat(' ', 40) . "\r"); // Clear the line
+        $this->output->write("\r".str_repeat(' ', 40)."\r"); // Clear the line
     }
 
     /**

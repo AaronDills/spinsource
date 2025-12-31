@@ -28,14 +28,15 @@ class WikidataSeedArtistIds extends WikidataJob implements ShouldBeUnique
     public function uniqueId(): string
     {
         $cursor = $this->afterOid ?? 'START';
+
         return "wikidata:artist_ids:after:{$cursor}:size:{$this->pageSize}";
     }
 
     public function handle(): void
     {
         Log::info('Wikidata artist ID page start', [
-            'afterOid'  => $this->afterOid,
-            'pageSize'  => $this->pageSize,
+            'afterOid' => $this->afterOid,
+            'pageSize' => $this->pageSize,
             'batchSize' => $this->batchSize,
         ]);
 
@@ -45,7 +46,7 @@ class WikidataSeedArtistIds extends WikidataJob implements ShouldBeUnique
         }
 
         $sparql = Sparql::load('artist_ids', [
-            'limit'        => $this->pageSize,
+            'limit' => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);
 
@@ -64,13 +65,16 @@ class WikidataSeedArtistIds extends WikidataJob implements ShouldBeUnique
                 'afterOid' => $this->afterOid,
                 'pageSize' => $this->pageSize,
             ]);
+
             return;
         }
 
         $qids = [];
         foreach ($bindings as $row) {
             $qid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
-            if ($qid) $qids[] = $qid;
+            if ($qid) {
+                $qids[] = $qid;
+            }
         }
 
         $qids = array_values(array_unique($qids));
@@ -79,10 +83,10 @@ class WikidataSeedArtistIds extends WikidataJob implements ShouldBeUnique
         $nextAfterOid = (int) data_get($bindings[$count - 1], 'oid.value');
 
         Log::info('Wikidata artist ID page fetched', [
-            'afterOid'     => $this->afterOid,
-            'pageSize'     => $this->pageSize,
-            'returned'     => $count,
-            'uniqueQids'   => count($qids),
+            'afterOid' => $this->afterOid,
+            'pageSize' => $this->pageSize,
+            'returned' => $count,
+            'uniqueQids' => count($qids),
             'nextAfterOid' => $nextAfterOid,
         ]);
 
@@ -93,19 +97,19 @@ class WikidataSeedArtistIds extends WikidataJob implements ShouldBeUnique
         }
 
         // If we got a full page and have a valid cursor, enqueue next page (unless single-page mode)
-        if ($count === $this->pageSize && $nextAfterOid > 0 && !$this->singlePage) {
+        if ($count === $this->pageSize && $nextAfterOid > 0 && ! $this->singlePage) {
             usleep(250_000);
 
             self::dispatch($nextAfterOid, $this->pageSize, $this->batchSize, false);
 
             Log::info('Enqueued next Wikidata artist ID page', [
                 'nextAfterOid' => $nextAfterOid,
-                'pageSize'     => $this->pageSize,
+                'pageSize' => $this->pageSize,
             ]);
         } elseif ($this->singlePage) {
             Log::info('Single-page mode: stopping after first page', [
                 'afterOid' => $this->afterOid,
-                'count'    => $count,
+                'count' => $count,
             ]);
         }
     }

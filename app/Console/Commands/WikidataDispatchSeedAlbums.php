@@ -18,11 +18,12 @@ class WikidataDispatchSeedAlbums extends Command
     public function handle(): int
     {
         $artistBatchSize = max(5, min(100, (int) $this->option('artist-batch-size')));
-        $afterArtistId   = $this->option('after-artist-id');
-        $singlePage      = $this->option('single-page');
+        $afterArtistId = $this->option('after-artist-id');
+        $singlePage = $this->option('single-page');
 
-        if ($afterArtistId !== null && (!ctype_digit((string) $afterArtistId) || (int) $afterArtistId < 0)) {
+        if ($afterArtistId !== null && (! ctype_digit((string) $afterArtistId) || (int) $afterArtistId < 0)) {
             $this->error('Invalid --after-artist-id. Must be a non-negative integer (local artists.id).');
+
             return self::FAILURE;
         }
 
@@ -35,9 +36,9 @@ class WikidataDispatchSeedAlbums extends Command
         WikidataSeedAlbums::dispatch($afterArtistId, $artistBatchSize, $singlePage);
 
         Log::info('Dispatched Wikidata album seeding (backfill)', [
-            'afterArtistId'   => $afterArtistId,
+            'afterArtistId' => $afterArtistId,
             'artistBatchSize' => $artistBatchSize,
-            'singlePage'      => $singlePage,
+            'singlePage' => $singlePage,
         ]);
 
         $start = $afterArtistId ? "after artists.id={$afterArtistId}" : 'from beginning';

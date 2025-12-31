@@ -20,7 +20,7 @@ class Sparql
         $query = File::get($path);
 
         foreach ($vars as $key => $value) {
-            $query = str_replace('{{' . $key . '}}', (string) $value, $query);
+            $query = str_replace('{{'.$key.'}}', (string) $value, $query);
         }
 
         return $query;

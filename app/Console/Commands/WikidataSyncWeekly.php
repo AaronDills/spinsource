@@ -24,14 +24,14 @@ class WikidataSyncWeekly extends Command
 
     public function handle(): int
     {
-        $onlyGenres  = $this->option('genres');
+        $onlyGenres = $this->option('genres');
         $onlyArtists = $this->option('artists');
-        $onlyAlbums  = $this->option('albums');
-        $skipNew     = $this->option('skip-new');
+        $onlyAlbums = $this->option('albums');
+        $skipNew = $this->option('skip-new');
         $skipChanged = $this->option('skip-changed');
 
         // If none specified, run all
-        $runAll = !$onlyGenres && !$onlyArtists && !$onlyAlbums;
+        $runAll = ! $onlyGenres && ! $onlyArtists && ! $onlyAlbums;
 
         $this->info('Starting weekly incremental Wikidata sync...');
         $this->newLine();
@@ -42,15 +42,15 @@ class WikidataSyncWeekly extends Command
         if ($runAll || $onlyGenres) {
             $genreCheckpoint = IngestionCheckpoint::forKey('genres');
 
-            if (!$skipNew) {
+            if (! $skipNew) {
                 $this->info('Dispatching: Discover new genres');
                 DiscoverNewGenres::dispatch();
                 $dispatched[] = 'DiscoverNewGenres';
             }
 
-            if (!$skipChanged) {
+            if (! $skipChanged) {
                 $this->info('Dispatching: Discover changed genres');
-                $this->line("  Last changed at: " . ($genreCheckpoint->last_changed_at?->toIso8601String() ?? 'never'));
+                $this->line('  Last changed at: '.($genreCheckpoint->last_changed_at?->toIso8601String() ?? 'never'));
                 DiscoverChangedGenres::dispatch();
                 $dispatched[] = 'DiscoverChangedGenres';
             }
@@ -60,16 +60,16 @@ class WikidataSyncWeekly extends Command
         if ($runAll || $onlyArtists) {
             $artistCheckpoint = IngestionCheckpoint::forKey('artists');
 
-            if (!$skipNew) {
+            if (! $skipNew) {
                 $this->info('Dispatching: Discover new artists');
-                $this->line("  Last seen O-ID: " . ($artistCheckpoint->last_seen_oid ?? 'none'));
+                $this->line('  Last seen O-ID: '.($artistCheckpoint->last_seen_oid ?? 'none'));
                 DiscoverNewArtistIds::dispatch();
                 $dispatched[] = 'DiscoverNewArtistIds';
             }
 
-            if (!$skipChanged) {
+            if (! $skipChanged) {
                 $this->info('Dispatching: Discover changed artists');
-                $this->line("  Last changed at: " . ($artistCheckpoint->last_changed_at?->toIso8601String() ?? 'never'));
+                $this->line('  Last changed at: '.($artistCheckpoint->last_changed_at?->toIso8601String() ?? 'never'));
                 DiscoverChangedArtists::dispatch();
                 $dispatched[] = 'DiscoverChangedArtists';
             }
@@ -83,7 +83,7 @@ class WikidataSyncWeekly extends Command
         }
 
         $this->newLine();
-        $this->info('Weekly sync dispatched ' . count($dispatched) . ' job(s):');
+        $this->info('Weekly sync dispatched '.count($dispatched).' job(s):');
         foreach ($dispatched as $job) {
             $this->line("  - {$job}");
         }

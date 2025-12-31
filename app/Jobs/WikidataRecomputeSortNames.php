@@ -48,10 +48,14 @@ class WikidataRecomputeSortNames extends WikidataJob
         $nameComponents = [];
         foreach ($bindings as $row) {
             $qid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
-            if (!$qid) continue;
+            if (! $qid) {
+                continue;
+            }
 
             // Only take first result per artist
-            if (isset($nameComponents[$qid])) continue;
+            if (isset($nameComponents[$qid])) {
+                continue;
+            }
 
             $nameComponents[$qid] = [
                 'givenName' => data_get($row, 'givenNameLabel.value'),
@@ -94,14 +98,20 @@ class WikidataRecomputeSortNames extends WikidataJob
     private function computeSortName(?string $displayName, ?string $givenName, ?string $familyName): ?string
     {
         $displayName = $displayName ? trim($displayName) : null;
-        if (!$displayName) return null;
+        if (! $displayName) {
+            return null;
+        }
 
         $givenName = $givenName ? trim($givenName) : null;
         $familyName = $familyName ? trim($familyName) : null;
 
         // Skip Q-ID labels that leaked through
-        if ($givenName && preg_match('/^Q\d+$/', $givenName)) $givenName = null;
-        if ($familyName && preg_match('/^Q\d+$/', $familyName)) $familyName = null;
+        if ($givenName && preg_match('/^Q\d+$/', $givenName)) {
+            $givenName = null;
+        }
+        if ($familyName && preg_match('/^Q\d+$/', $familyName)) {
+            $familyName = null;
+        }
 
         // If we have family name, format as "Family, Given"
         if ($familyName) {

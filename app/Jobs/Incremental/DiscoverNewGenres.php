@@ -26,8 +26,8 @@ class DiscoverNewGenres extends WikidataJob
         $afterOid = $checkpoint->last_seen_oid;
 
         Log::info('Incremental: Discover new genres start', [
-            'afterOid'  => $afterOid,
-            'pageSize'  => $this->pageSize,
+            'afterOid' => $afterOid,
+            'pageSize' => $this->pageSize,
         ]);
 
         $afterFilter = '';
@@ -36,7 +36,7 @@ class DiscoverNewGenres extends WikidataJob
         }
 
         $sparql = Sparql::load('incremental/new_genres', [
-            'limit'        => $this->pageSize,
+            'limit' => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);
 
@@ -53,6 +53,7 @@ class DiscoverNewGenres extends WikidataJob
             Log::info('Incremental: No new genres found', [
                 'afterOid' => $afterOid,
             ]);
+
             return;
         }
 
@@ -67,8 +68,8 @@ class DiscoverNewGenres extends WikidataJob
 
         Log::info('Incremental: New genres discovered', [
             'afterOid' => $afterOid,
-            'count'    => $count,
-            'maxOid'   => $maxOid,
+            'count' => $count,
+            'maxOid' => $maxOid,
         ]);
 
         // Dispatch the existing genre seeder from the checkpoint

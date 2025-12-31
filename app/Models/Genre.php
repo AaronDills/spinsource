@@ -52,6 +52,6 @@ class Genre extends Model
 
     public function getScoutKey(): mixed
     {
-        return 'genre_' . (string) $this->getKey();
+        return 'genre_'.(string) $this->getKey();
     }
 }

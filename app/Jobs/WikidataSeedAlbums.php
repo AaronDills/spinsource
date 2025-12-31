@@ -25,6 +25,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
     public function uniqueId(): string
     {
         $cursor = $this->afterArtistId ?? 'START';
+
         return "wikidata:albums:after_artist_id:{$cursor}:size:{$this->artistBatchSize}";
     }
 
@@ -48,6 +49,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'afterArtistId' => $this->afterArtistId,
                 'artistBatchSize' => $artistBatchSize,
             ]);
+
             return;
         }
 
@@ -93,7 +95,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
         }
 
         // Dispatch next batch (unless single-page mode)
-        if ($artists->count() === $artistBatchSize && !$this->singlePage) {
+        if ($artists->count() === $artistBatchSize && ! $this->singlePage) {
             usleep(250_000);
 
             self::dispatch($nextAfterArtistId, $artistBatchSize, false);
@@ -105,7 +107,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
         } elseif ($this->singlePage) {
             Log::info('Single-page mode: stopping after first batch', [
                 'afterArtistId' => $this->afterArtistId,
-                'artistCount'   => $artists->count(),
+                'artistCount' => $artists->count(),
             ]);
         } else {
             Log::info('Wikidata album seeding completed', [
@@ -125,12 +127,16 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
 
         foreach ($bindings as $row) {
             $albumQid = $this->qidFromEntityUrl(data_get($row, 'album.value'));
-            if (! $albumQid) continue;
+            if (! $albumQid) {
+                continue;
+            }
 
             // If using aggregated SPARQL, this will be a single artist value.
             // If using non-aggregated, this may vary row-to-row; first wins (MVP).
             $artistQid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
-            if (! $artistQid || ! isset($artistQidToId[$artistQid])) continue;
+            if (! $artistQid || ! isset($artistQidToId[$artistQid])) {
+                continue;
+            }
 
             $byAlbum[$albumQid] ??= [
                 'wikidata_id' => $albumQid,
@@ -144,7 +150,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
 
             $title = data_get($row, 'albumLabel.value');
             // Skip albums that still have Q-ID as title (no label in Wikidata)
-            if ($title && !preg_match('/^Q\d+$/', $title)) {
+            if ($title && ! preg_match('/^Q\d+$/', $title)) {
                 $byAlbum[$albumQid]['title'] = $byAlbum[$albumQid]['title'] ?? $title;
             }
             $byAlbum[$albumQid]['description'] = $byAlbum[$albumQid]['description'] ?? data_get($row, 'albumDescription.value');
@@ -160,6 +166,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
         foreach ($byAlbum as $data) {
             if (! $data['title']) {
                 $skippedNoTitle++;
+
                 continue;
             }
 
@@ -186,6 +193,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'albumsMerged' => count($byAlbum),
                 'skippedNoTitle' => $skippedNoTitle,
             ]);
+
             return;
         }
 

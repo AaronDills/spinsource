@@ -30,9 +30,9 @@ class DiscoverChangedGenres extends WikidataJob
         $since = $sinceTs ? $sinceTs->toIso8601String() : Carbon::now()->subWeek()->toIso8601String();
 
         Log::info('Incremental: Discover changed genres start', [
-            'since'         => $since,
+            'since' => $since,
             'afterModified' => $this->afterModified,
-            'pageSize'      => $this->pageSize,
+            'pageSize' => $this->pageSize,
         ]);
 
         $afterModifiedFilter = '';
@@ -41,9 +41,9 @@ class DiscoverChangedGenres extends WikidataJob
         }
 
         $sparql = Sparql::load('incremental/changed_genres_since', [
-            'since'                 => $since,
+            'since' => $since,
             'after_modified_filter' => $afterModifiedFilter,
-            'limit'                 => $this->pageSize,
+            'limit' => $this->pageSize,
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
@@ -59,6 +59,7 @@ class DiscoverChangedGenres extends WikidataJob
             Log::info('Incremental: No changed genres found', [
                 'since' => $since,
             ]);
+
             return;
         }
 
@@ -83,15 +84,15 @@ class DiscoverChangedGenres extends WikidataJob
         $qids = array_values(array_unique($qids));
 
         Log::info('Incremental: Changed genres discovered', [
-            'since'       => $since,
-            'count'       => $count,
-            'uniqueQids'  => count($qids),
+            'since' => $since,
+            'count' => $count,
+            'uniqueQids' => count($qids),
             'maxModified' => $maxModified?->toIso8601String(),
         ]);
 
         // Enrich changed genres by re-fetching from the main genres SPARQL
         // Note: genres are small enough that we can process inline
-        if (!empty($qids)) {
+        if (! empty($qids)) {
             EnrichChangedGenres::dispatch($qids);
         }
 
@@ -101,7 +102,7 @@ class DiscoverChangedGenres extends WikidataJob
         }
 
         Log::info('Incremental: Changed genres processed', [
-            'qidsToEnrich'     => count($qids),
+            'qidsToEnrich' => count($qids),
             'newLastChangedAt' => $maxModified?->toIso8601String(),
         ]);
 

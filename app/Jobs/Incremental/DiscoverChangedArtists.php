@@ -32,9 +32,9 @@ class DiscoverChangedArtists extends WikidataJob
         $since = $sinceTs ? $sinceTs->toIso8601String() : Carbon::now()->subWeek()->toIso8601String();
 
         Log::info('Incremental: Discover changed artists start', [
-            'since'         => $since,
+            'since' => $since,
             'afterModified' => $this->afterModified,
-            'pageSize'      => $this->pageSize,
+            'pageSize' => $this->pageSize,
         ]);
 
         $afterModifiedFilter = '';
@@ -43,9 +43,9 @@ class DiscoverChangedArtists extends WikidataJob
         }
 
         $sparql = Sparql::load('incremental/changed_artists_since', [
-            'since'                 => $since,
+            'since' => $since,
             'after_modified_filter' => $afterModifiedFilter,
-            'limit'                 => $this->pageSize,
+            'limit' => $this->pageSize,
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
@@ -61,6 +61,7 @@ class DiscoverChangedArtists extends WikidataJob
             Log::info('Incremental: No changed artists found', [
                 'since' => $since,
             ]);
+
             return;
         }
 
@@ -85,9 +86,9 @@ class DiscoverChangedArtists extends WikidataJob
         $qids = array_values(array_unique($qids));
 
         Log::info('Incremental: Changed artists discovered', [
-            'since'       => $since,
-            'count'       => $count,
-            'uniqueQids'  => count($qids),
+            'since' => $since,
+            'count' => $count,
+            'uniqueQids' => count($qids),
             'maxModified' => $maxModified?->toIso8601String(),
         ]);
 
@@ -108,7 +109,7 @@ class DiscoverChangedArtists extends WikidataJob
 
         Log::info('Incremental: Changed artists processed', [
             'enrichJobsDispatched' => count($chunks),
-            'newLastChangedAt'     => $maxModified?->toIso8601String(),
+            'newLastChangedAt' => $maxModified?->toIso8601String(),
         ]);
 
         // Continue paging if we got a full page
