@@ -1,0 +1,8 @@
+# Artist genres - simple query for genre relationships only
+# Split from artist_enrich.sparql to reduce query complexity
+
+SELECT ?artist ?genre
+WHERE {
+  VALUES ?artist { {{values}} }
+  ?artist wdt:P136 ?genre .
+}

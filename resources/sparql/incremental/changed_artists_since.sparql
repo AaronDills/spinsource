@@ -1,0 +1,28 @@
+# Incremental discovery of CHANGED artist entities since a timestamp
+# Used by weekly incremental sync to find artists modified since last run
+# Invalid entities (no labels) are filtered during enrichment step
+
+PREFIX schema: <http://schema.org/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT DISTINCT ?artist ?modified WHERE {
+  {
+    # Humans who are musicians
+    ?artist wdt:P31 wd:Q5 ;
+            wdt:P106/wdt:P279* wd:Q639669 .
+  }
+  UNION
+  {
+    # Musical groups (including subclasses)
+    ?artist wdt:P31/wdt:P279* wd:Q215380 .
+  }
+
+  # Get modification timestamp
+  ?artist schema:dateModified ?modified .
+
+  # Filter by since timestamp
+  FILTER(?modified > "{{since}}"^^xsd:dateTime)
+  {{after_modified_filter}}
+}
+ORDER BY ?modified
+LIMIT {{limit}}

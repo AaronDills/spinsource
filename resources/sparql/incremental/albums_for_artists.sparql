@@ -1,7 +1,7 @@
-# Fetch albums for a batch of artists - optimized for speed
-# Removed expensive Wikipedia URL lookup
+# Fetch albums for a batch of artist QIDs - optimized for speed
+# Used by weekly incremental sync to refresh albums for changed artists
 
-SELECT
+SELECT DISTINCT
   ?album
   ?albumLabel
   ?albumDescription
@@ -14,7 +14,7 @@ WHERE {
 
   ?album wdt:P175 ?artist .
 
-  # Constrain to album-like items
+  # Constrain to album-like items (specific types for performance)
   ?album wdt:P31 ?albumType .
   VALUES ?albumType {
     wd:Q482994    # studio album

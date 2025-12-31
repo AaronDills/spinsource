@@ -6,32 +6,21 @@ use App\Enums\AlbumType;
 use App\Models\Album;
 use App\Models\Artist;
 use App\Support\Sparql;
-use Carbon\Carbon;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Http\Client\RequestException;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
+class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
-    public int $tries = 5;
-    public int $timeout = 120;
-    public array $backoff = [5, 15, 45, 120, 300];
-
-    // Prevent yesterday’s START cursor uniqueness from blocking today’s run
+    // Prevent yesterday's START cursor uniqueness from blocking today's run
     public int $uniqueFor = 60 * 60; // 1 hour
 
     public function __construct(
         public ?int $afterArtistId = null, // cursor over local artists.id
         public int $artistBatchSize = 25,  // how many artists per WDQS request
-    ) {}
+        public bool $singlePage = false, // diagnostic mode: no continuation
+    ) {
+        parent::__construct();
+    }
 
     public function uniqueId(): string
     {
@@ -41,9 +30,6 @@ class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
 
     public function handle(): void
     {
-        $endpoint = config('wikidata.endpoint');
-        $ua = config('wikidata.user_agent');
-
         $artistBatchSize = max(5, min(100, (int) $this->artistBatchSize));
 
         // Cursor-based paging over local artists table (avoids DB OFFSET)
@@ -88,30 +74,11 @@ class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
             'values' => $values,
         ]);
 
-        try {
-            $response = Http::withHeaders([
-                    'Accept'          => 'application/sparql-results+json',
-                    'User-Agent'      => $ua,
-                    'Accept-Encoding' => 'gzip',
-                    'Content-Type'    => 'application/x-www-form-urlencoded',
-                ])
-                ->connectTimeout(10)
-                ->timeout(120)
-                ->retry(4, 1500)
-                ->asForm()
-                ->post($endpoint, [
-                    'format' => 'json',
-                    'query'  => $sparql,
-                ])
-                ->throw();
-        } catch (RequestException $e) {
-            Log::warning('Wikidata album seeding request failed', [
-                'afterArtistId' => $this->afterArtistId,
-                'artistBatchSize' => $artistBatchSize,
-                'status' => optional($e->response)->status(),
-                'message' => $e->getMessage(),
-            ]);
-            throw $e;
+        $response = $this->executeWdqsRequest($sparql);
+
+        // If null, job was released due to 429 rate limit
+        if ($response === null) {
+            return;
         }
 
         $bindings = $response->json('results.bindings', []);
@@ -125,16 +92,20 @@ class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
             $this->processAlbumsUpsert($bindings, $artistQidToId);
         }
 
-        // Dispatch next batch
-        if ($artists->count() === $artistBatchSize) {
+        // Dispatch next batch (unless single-page mode)
+        if ($artists->count() === $artistBatchSize && !$this->singlePage) {
             usleep(250_000);
 
-            self::dispatch($nextAfterArtistId, $artistBatchSize)
-                ->onQueue($this->queue ?? 'default');
+            self::dispatch($nextAfterArtistId, $artistBatchSize, false);
 
             Log::info('Enqueued next Wikidata album batch', [
                 'nextAfterArtistId' => $nextAfterArtistId,
                 'artistBatchSize' => $artistBatchSize,
+            ]);
+        } elseif ($this->singlePage) {
+            Log::info('Single-page mode: stopping after first batch', [
+                'afterArtistId' => $this->afterArtistId,
+                'artistCount'   => $artists->count(),
             ]);
         } else {
             Log::info('Wikidata album seeding completed', [
@@ -168,16 +139,18 @@ class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
                 'album_type_qid' => null,
                 'publication_date' => null,
                 'musicbrainz_release_group_id' => null,
-                'wikipedia_url' => null,
                 'description' => null,
             ];
 
-            $byAlbum[$albumQid]['title'] = $byAlbum[$albumQid]['title'] ?? data_get($row, 'albumLabel.value');
+            $title = data_get($row, 'albumLabel.value');
+            // Skip albums that still have Q-ID as title (no label in Wikidata)
+            if ($title && !preg_match('/^Q\d+$/', $title)) {
+                $byAlbum[$albumQid]['title'] = $byAlbum[$albumQid]['title'] ?? $title;
+            }
             $byAlbum[$albumQid]['description'] = $byAlbum[$albumQid]['description'] ?? data_get($row, 'albumDescription.value');
             $byAlbum[$albumQid]['album_type_qid'] = $byAlbum[$albumQid]['album_type_qid'] ?? $this->qidFromEntityUrl(data_get($row, 'albumType.value'));
             $byAlbum[$albumQid]['publication_date'] = $byAlbum[$albumQid]['publication_date'] ?? data_get($row, 'publicationDate.value');
             $byAlbum[$albumQid]['musicbrainz_release_group_id'] = $byAlbum[$albumQid]['musicbrainz_release_group_id'] ?? data_get($row, 'musicBrainzReleaseGroupId.value');
-            $byAlbum[$albumQid]['wikipedia_url'] = $byAlbum[$albumQid]['wikipedia_url'] ?? data_get($row, 'wikipediaUrl.value');
         }
 
         $now = now();
@@ -201,7 +174,6 @@ class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
                 'release_year' => $releaseYear,
                 'release_date' => $releaseDate,
                 'description' => $data['description'],
-                'wikipedia_url' => $data['wikipedia_url'],
                 'musicbrainz_release_group_id' => $data['musicbrainz_release_group_id'],
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -228,7 +200,6 @@ class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
                 'release_year',
                 'release_date',
                 'description',
-                'wikipedia_url',
                 'musicbrainz_release_group_id',
                 'updated_at',
             ]
@@ -254,39 +225,5 @@ class WikidataSeedAlbums implements ShouldQueue, ShouldBeUnique
             'Q24672043' => AlbumType::SOUNDTRACK->value, // soundtrack album
             default => AlbumType::OTHER->value,
         };
-    }
-
-    private function qidFromEntityUrl(?string $url): ?string
-    {
-        if (! $url) return null;
-        $pos = strrpos($url, '/');
-        if ($pos === false) return null;
-        $qid = substr($url, $pos + 1);
-        return preg_match('/^Q\d+$/', $qid) ? $qid : null;
-    }
-
-    private function parseDate(?string $dateValue): ?Carbon
-    {
-        if (! $dateValue) return null;
-        $clean = ltrim($dateValue, '+');
-
-        try {
-            return Carbon::parse($clean);
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    private function extractYear(?string $dateValue): ?int
-    {
-        if (! $dateValue) return null;
-        $clean = ltrim($dateValue, '+');
-
-        try {
-            return Carbon::parse($clean)->year;
-        } catch (\Throwable) {
-            if (preg_match('/(\d{4})/', $clean, $m)) return (int) $m[1];
-            return null;
-        }
     }
 }

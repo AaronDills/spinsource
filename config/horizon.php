@@ -210,6 +210,19 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+        // Dedicated supervisor for Wikidata jobs - limited to 1 worker to respect rate limits
+        'wikidata-supervisor' => [
+            'connection' => 'redis',
+            'queue' => ['wikidata'],
+            'balance' => 'false',
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 3,
+            'timeout' => 300,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -219,11 +232,17 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'wikidata-supervisor' => [
+                'maxProcesses' => 1, // Keep at 1 to respect Wikidata rate limits
+            ],
         ],
 
         'local' => [
             'supervisor-1' => [
                 'maxProcesses' => 3,
+            ],
+            'wikidata-supervisor' => [
+                'maxProcesses' => 1,
             ],
         ],
     ],

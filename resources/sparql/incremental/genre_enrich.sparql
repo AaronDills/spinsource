@@ -1,0 +1,21 @@
+# Enrich a batch of genre QIDs with full metadata
+# Used by incremental sync to update changed genres
+
+SELECT DISTINCT
+  ?genre
+  ?genreLabel
+  ?genreDescription
+  ?inception
+  ?country ?countryLabel
+  ?parentGenre ?parentGenreLabel
+  ?musicBrainzId
+WHERE {
+  VALUES ?genre { {{values}} }
+
+  OPTIONAL { ?genre wdt:P571 ?inception . }
+  OPTIONAL { ?genre wdt:P495 ?country . }
+  OPTIONAL { ?genre wdt:P279 ?parentGenre . }
+  OPTIONAL { ?genre wdt:P436 ?musicBrainzId . }
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}

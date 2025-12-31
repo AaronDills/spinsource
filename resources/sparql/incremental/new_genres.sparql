@@ -1,0 +1,14 @@
+# Incremental discovery of NEW genre entities by O-ID cursor
+# Used by weekly incremental sync to find genres added since last checkpoint
+
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT DISTINCT ?genre ?oid WHERE {
+  ?genre wdt:P31 wd:Q188451 .
+
+  # Bind numeric O-ID for cursor paging
+  BIND(xsd:integer(STRAFTER(STR(?genre), "entity/Q")) AS ?oid)
+  {{after_filter}}
+}
+ORDER BY ?oid
+LIMIT {{limit}}

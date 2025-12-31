@@ -3,24 +3,11 @@
 namespace App\Jobs;
 
 use App\Support\Sparql;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Http\Client\RequestException;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
+class WikidataSeedArtistIds extends WikidataJob implements ShouldBeUnique
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
-    public int $tries = 5;
-    public int $timeout = 120;
-    public array $backoff = [5, 15, 45, 120, 300];
-
     // Prevent yesterday's START cursor uniqueness from blocking today's run
     public int $uniqueFor = 60 * 60; // 1 hour
 
@@ -32,8 +19,11 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
     public function __construct(
         public ?int $afterOid = null,
         public int $pageSize = 2000,
-        public int $batchSize = 100, // how many QIDs per enrich job
-    ) {}
+        public int $batchSize = 10, // how many QIDs per enrich job (reduced to avoid WDQS timeouts)
+        public bool $singlePage = false, // diagnostic mode: no continuation
+    ) {
+        parent::__construct();
+    }
 
     public function uniqueId(): string
     {
@@ -43,9 +33,6 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
 
     public function handle(): void
     {
-        $endpoint = config('wikidata.endpoint');
-        $ua = config('wikidata.user_agent');
-
         Log::info('Wikidata artist ID page start', [
             'afterOid'  => $this->afterOid,
             'pageSize'  => $this->pageSize,
@@ -62,30 +49,11 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
             'after_filter' => $afterFilter,
         ]);
 
-        try {
-            $response = Http::withHeaders([
-                    'Accept'          => 'application/sparql-results+json',
-                    'User-Agent'      => $ua,
-                    'Accept-Encoding' => 'gzip',
-                    'Content-Type'    => 'application/x-www-form-urlencoded',
-                ])
-                ->connectTimeout(10)
-                ->timeout(120)
-                ->retry(4, 1500)
-                ->asForm()
-                ->post($endpoint, [
-                    'format' => 'json',
-                    'query'  => $sparql,
-                ])
-                ->throw();
-        } catch (RequestException $e) {
-            Log::warning('Wikidata artist ID page request failed', [
-                'afterOid' => $this->afterOid,
-                'pageSize' => $this->pageSize,
-                'status'   => optional($e->response)->status(),
-                'message'  => $e->getMessage(),
-            ]);
-            throw $e;
+        $response = $this->executeWdqsRequest($sparql);
+
+        // If null, job was released due to 429 rate limit
+        if ($response === null) {
+            return;
         }
 
         $bindings = $response->json('results.bindings', []);
@@ -121,29 +89,24 @@ class WikidataSeedArtistIds implements ShouldQueue, ShouldBeUnique
         // Dispatch enrichment in smaller batches to keep per-job work bounded
         $chunks = array_chunk($qids, max(10, $this->batchSize));
         foreach ($chunks as $chunk) {
-            WikidataEnrichArtists::dispatch($chunk)->onQueue($this->queue ?? 'default');
+            WikidataEnrichArtists::dispatch($chunk);
         }
 
-        // If we got a full page and have a valid cursor, enqueue next page.
-        if ($count === $this->pageSize && $nextAfterOid > 0) {
+        // If we got a full page and have a valid cursor, enqueue next page (unless single-page mode)
+        if ($count === $this->pageSize && $nextAfterOid > 0 && !$this->singlePage) {
             usleep(250_000);
 
-            self::dispatch($nextAfterOid, $this->pageSize, $this->batchSize)
-                ->onQueue($this->queue ?? 'default');
+            self::dispatch($nextAfterOid, $this->pageSize, $this->batchSize, false);
 
             Log::info('Enqueued next Wikidata artist ID page', [
                 'nextAfterOid' => $nextAfterOid,
                 'pageSize'     => $this->pageSize,
             ]);
+        } elseif ($this->singlePage) {
+            Log::info('Single-page mode: stopping after first page', [
+                'afterOid' => $this->afterOid,
+                'count'    => $count,
+            ]);
         }
-    }
-
-    private function qidFromEntityUrl(?string $url): ?string
-    {
-        if (! $url) return null;
-        $pos = strrpos($url, '/');
-        if ($pos === false) return null;
-        $qid = substr($url, $pos + 1);
-        return preg_match('/^Q\d+$/', $qid) ? $qid : null;
     }
 }

@@ -1,7 +1,8 @@
-PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-
-# Discovery query for artist QIDs - kept simple to avoid timeouts
+# Incremental discovery of NEW artist entities by O-ID cursor
+# Used by weekly incremental sync to find artists added since last checkpoint
 # Invalid entities (no labels) are filtered during enrichment step
+
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
 SELECT DISTINCT ?artist ?oid WHERE {
   {

@@ -1,71 +1,56 @@
 <?php
 
-namespace App\Jobs;
+namespace App\Jobs\Incremental;
 
+use App\Jobs\WikidataJob;
 use App\Models\Country;
 use App\Models\Genre;
 use App\Support\Sparql;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Log;
 
-class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
+/**
+ * Enrich a batch of changed genre QIDs.
+ * Re-fetches full genre data from Wikidata and upserts.
+ */
+class EnrichChangedGenres extends WikidataJob
 {
-    /**
-     * Cursor pagination using numeric O-ID:
-     * - null = start from beginning
-     * - integer = fetch items with O-ID > afterOid
-     */
     public function __construct(
-        public ?int $afterOid = null,
-        public int $pageSize = 500,
-        public bool $singlePage = false, // diagnostic mode: no continuation
+        public array $genreQids = [],
     ) {
         parent::__construct();
     }
 
-    public function uniqueId(): string
-    {
-        // Prevent accidental duplicate page processing
-        $cursor = $this->afterOid ?? 'START';
-        return "wikidata:genres:after:{$cursor}:size:{$this->pageSize}";
-    }
-
     public function handle(): void
     {
-        Log::info('Wikidata genre seed page start', [
-            'afterOid'  => $this->afterOid,
-            'pageSize'  => $this->pageSize,
-        ]);
-
-        $afterFilter = '';
-        if (is_int($this->afterOid) && $this->afterOid > 0) {
-            $afterFilter = "FILTER(?oid > {$this->afterOid})";
+        if (empty($this->genreQids)) {
+            return;
         }
 
-        $sparql = Sparql::load('genres', [
-            'limit'        => $this->pageSize,
-            'after_filter' => $afterFilter,
+        Log::info('Incremental: Enrich changed genres start', [
+            'count' => count($this->genreQids),
+        ]);
+
+        $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $this->genreQids));
+
+        $sparql = Sparql::load('incremental/genre_enrich', [
+            'values' => $values,
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
 
-        // If null, job was released due to 429 rate limit
         if ($response === null) {
-            return;
+            return; // Rate limited, job released
         }
 
         $bindings = $response->json('results.bindings', []);
-        $count = count($bindings);
 
-        if ($count === 0) {
-            Log::info('Wikidata genre seed completed (no more results)', [
-                'afterOid' => $this->afterOid,
-                'pageSize' => $this->pageSize,
-            ]);
+        if (empty($bindings)) {
+            Log::info('Incremental: No genre data returned');
             return;
         }
 
         $pendingParents = [];
+        $upserted = 0;
 
         foreach ($bindings as $row) {
             $genreQid = $this->qidFromEntityUrl(data_get($row, 'genre.value'));
@@ -93,7 +78,6 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
                 $pendingParents[$genreQid] = $parentQid;
             }
 
-            // Keep name nullable handling explicit (optional but clearer than array_filter magic)
             $payload = [
                 'name'           => $name ?: null,
                 'description'    => $description ?: null,
@@ -106,38 +90,18 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
                 $payload,
                 static fn ($v) => $v !== null
             ));
+
+            $upserted++;
         }
 
         if (!empty($pendingParents)) {
             $this->resolveParents($pendingParents);
         }
 
-        // Compute next cursor from last binding's numeric O-ID
-        $nextAfterOid = (int) data_get($bindings[$count - 1], 'oid.value');
-
-        Log::info('Wikidata genre seed page done', [
-            'afterOid'     => $this->afterOid,
-            'pageSize'     => $this->pageSize,
-            'count'        => $count,
-            'nextAfterOid' => $nextAfterOid,
+        Log::info('Incremental: Changed genres enriched', [
+            'requested' => count($this->genreQids),
+            'upserted'  => $upserted,
         ]);
-
-        // If we got a full page and have a valid cursor, enqueue next page (unless single-page mode)
-        if ($count === $this->pageSize && $nextAfterOid > 0 && !$this->singlePage) {
-            usleep(250_000);
-
-            self::dispatch($nextAfterOid, $this->pageSize, false);
-
-            Log::info('Enqueued next Wikidata genre seed page', [
-                'nextAfterOid' => $nextAfterOid,
-                'pageSize'     => $this->pageSize,
-            ]);
-        } elseif ($this->singlePage) {
-            Log::info('Single-page mode: stopping after first page', [
-                'afterOid' => $this->afterOid,
-                'count'    => $count,
-            ]);
-        }
     }
 
     private function resolveParents(array $pendingParents): void
