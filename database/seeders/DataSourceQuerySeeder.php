@@ -96,6 +96,7 @@ SELECT
   ?musicBrainzReleaseGroupId
   ?spotifyAlbumId
   ?appleMusicAlbumId
+  ?coverImage
 WHERE {
   VALUES ?artist { {{values}} }
 
@@ -117,6 +118,7 @@ WHERE {
   OPTIONAL { ?album wdt:P436 ?musicBrainzReleaseGroupId . }
   OPTIONAL { ?album wdt:P2205 ?spotifyAlbumId . }
   OPTIONAL { ?album wdt:P2281 ?appleMusicAlbumId . }
+  OPTIONAL { ?album wdt:P18 ?coverImage . }
 
   SERVICE wikibase:label {
     bd:serviceParam wikibase:language "en,de,fr,es,it,pt,nl,*" .
@@ -464,6 +466,7 @@ SELECT DISTINCT
   ?albumType
   ?publicationDate
   ?musicBrainzReleaseGroupId
+  ?coverImage
 WHERE {
   VALUES ?artist { {{values}} }
 
@@ -483,10 +486,28 @@ WHERE {
 
   OPTIONAL { ?album wdt:P577 ?publicationDate . }
   OPTIONAL { ?album wdt:P436 ?musicBrainzReleaseGroupId . }
+  OPTIONAL { ?album wdt:P18 ?coverImage . }
 
   SERVICE wikibase:label {
     bd:serviceParam wikibase:language "en,de,fr,es,it,pt,nl,*" .
   }
+}
+SPARQL,
+            ],
+            [
+                'name' => 'album_covers',
+                'data_source' => 'wikidata',
+                'query_type' => 'sparql',
+                'description' => 'Fetch cover images for a batch of albums',
+                'variables' => ['values'],
+                'query' => <<<'SPARQL'
+# Fetch cover images for a batch of album QIDs
+# Used by WikidataEnrichAlbumCovers job for backfilling
+
+SELECT ?album ?coverImage
+WHERE {
+  VALUES ?album { {{values}} }
+  OPTIONAL { ?album wdt:P18 ?coverImage . }
 }
 SPARQL,
             ],

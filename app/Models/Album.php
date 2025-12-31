@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -23,6 +24,7 @@ class Album extends Model
         'release_date',
         'description',
         'wikipedia_url',
+        'cover_image_commons',
     ];
 
     protected $casts = [
@@ -45,12 +47,23 @@ class Album extends Model
         return $this->hasMany(UserAlbumRating::class);
     }
 
+    /**
+     * Get the full Wikimedia Commons URL for the cover image.
+     */
+    protected function coverImageUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->cover_image_commons
+                ? 'https://commons.wikimedia.org/wiki/Special:FilePath/'.rawurlencode($this->cover_image_commons).'?width=300'
+                : null,
+        );
+    }
+
     public function toSearchableArray(): array
     {
         return [
             'id' => (string) $this->id,
             'title' => $this->title,
-            'description' => $this->description,
             'release_year' => $this->release_year,
             'artist_name' => $this->artist?->name,
         ];

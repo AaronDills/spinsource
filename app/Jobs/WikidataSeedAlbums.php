@@ -148,6 +148,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'spotify_album_id' => null,
                 'apple_music_album_id' => null,
                 'description' => null,
+                'cover_image' => null,
             ];
 
             $title = data_get($row, 'albumLabel.value');
@@ -161,6 +162,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
             $byAlbum[$albumQid]['musicbrainz_release_group_id'] = $byAlbum[$albumQid]['musicbrainz_release_group_id'] ?? data_get($row, 'musicBrainzReleaseGroupId.value');
             $byAlbum[$albumQid]['spotify_album_id'] = $byAlbum[$albumQid]['spotify_album_id'] ?? data_get($row, 'spotifyAlbumId.value');
             $byAlbum[$albumQid]['apple_music_album_id'] = $byAlbum[$albumQid]['apple_music_album_id'] ?? data_get($row, 'appleMusicAlbumId.value');
+            $byAlbum[$albumQid]['cover_image'] = $byAlbum[$albumQid]['cover_image'] ?? $this->commonsFilename(data_get($row, 'coverImage.value'));
         }
 
         $now = now();
@@ -188,6 +190,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'musicbrainz_release_group_id' => $data['musicbrainz_release_group_id'],
                 'spotify_album_id' => $data['spotify_album_id'],
                 'apple_music_album_id' => $data['apple_music_album_id'],
+                'cover_image_commons' => $data['cover_image'],
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -217,6 +220,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'musicbrainz_release_group_id',
                 'spotify_album_id',
                 'apple_music_album_id',
+                'cover_image_commons',
                 'updated_at',
             ]
         );
@@ -241,5 +245,30 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
             'Q24672043' => AlbumType::SOUNDTRACK->value, // soundtrack album
             default => AlbumType::OTHER->value,
         };
+    }
+
+    /**
+     * Extract Commons filename from Wikidata image URL.
+     */
+    private function commonsFilename(?string $value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        if (str_contains($value, 'Special:FilePath/')) {
+            $value = substr($value, strrpos($value, 'Special:FilePath/') + strlen('Special:FilePath/'));
+        } else {
+            $slash = strrpos($value, '/');
+            if ($slash !== false) {
+                $value = substr($value, $slash + 1);
+            }
+        }
+
+        $value = urldecode($value);
+
+        return $value !== '' ? $value : null;
     }
 }

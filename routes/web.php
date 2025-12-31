@@ -1,11 +1,16 @@
 <?php
 
+use App\Http\Controllers\AlbumController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+Route::get('/search', [SearchController::class, 'search'])->name('search');
+Route::get('/album/{album}', [AlbumController::class, 'show'])->name('album.show');
 
 Route::get('/dashboard', function () {
     return view('dashboard');
