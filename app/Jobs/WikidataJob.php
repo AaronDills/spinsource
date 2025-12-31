@@ -28,9 +28,16 @@ abstract class WikidataJob implements ShouldQueue
     use HandlesWikidataRateLimits;
 
     /**
-     * Number of retry attempts before failing.
+     * Maximum number of attempts including rate-limit releases.
+     * Set high to accommodate many 429/403/504 releases.
      */
-    public int $tries = 5;
+    public int $tries = 50;
+
+    /**
+     * Maximum number of actual exceptions before failing.
+     * This is the "real" failure limit - rate-limit releases don't count.
+     */
+    public int $maxExceptions = 3;
 
     /**
      * Job timeout in seconds.

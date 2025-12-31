@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 class WikidataDispatchEnrichAlbumCovers extends Command
 {
     protected $signature = 'wikidata:dispatch-enrich-album-covers
-        {--batch-size=500 : Number of albums per job}
+        {--batch-size=50 : Number of albums per job}
         {--limit= : Maximum number of albums to process (default: all)}
         {--force : Also update albums that already have cover images}';
 
@@ -18,7 +18,7 @@ class WikidataDispatchEnrichAlbumCovers extends Command
 
     public function handle(): int
     {
-        $batchSize = max(50, min(1000, (int) $this->option('batch-size')));
+        $batchSize = max(10, min(100, (int) $this->option('batch-size')));
         $limit = $this->option('limit');
         $force = $this->option('force');
 

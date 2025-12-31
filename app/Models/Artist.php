@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -108,6 +109,26 @@ class Artist extends Model
                 return (int) round($score);
             },
         );
+    }
+
+    /**
+     * Modify the query used to retrieve models when making all searchable.
+     */
+    protected function makeAllSearchableUsing(Builder $query): Builder
+    {
+        return $query->select([
+            'id',
+            'name',
+            'sort_name',
+            'description',
+            'wikipedia_url',
+            'album_count',
+            'link_count',
+            'spotify_artist_id',
+            'apple_music_artist_id',
+            'discogs_artist_id',
+            'musicbrainz_id',
+        ]);
     }
 
     public function toSearchableArray(): array

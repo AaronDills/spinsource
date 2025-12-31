@@ -45,6 +45,7 @@ class Genre extends Model
     public function toSearchableArray(): array
     {
         return [
+            'id' => (string) $this->id,
             'name' => $this->name,
             'description' => $this->description,
         ];

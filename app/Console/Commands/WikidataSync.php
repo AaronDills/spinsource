@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class WikidataSync extends Command
 {
@@ -39,12 +40,18 @@ Use --only=<step> to run a single step manually.';
 
         if (! $this->option('force') && ! $lock->get()) {
             $this->warn('Another wikidata:sync is already running. Exiting.');
+            Log::warning('Wikidata sync skipped - another sync already running');
 
             return self::SUCCESS;
         }
 
         try {
             $this->info('Starting Wikidata sync...');
+            Log::info('Wikidata sync started', [
+                'only' => $this->option('only'),
+                'sequential' => $this->option('sequential'),
+                'force' => $this->option('force'),
+            ]);
             $this->newLine();
 
             $only = $this->option('only');
@@ -116,6 +123,11 @@ Use --only=<step> to run a single step manually.';
 
                 if ($exit !== self::SUCCESS) {
                     $this->error("Command failed: {$cmd}");
+                    Log::error('Wikidata sync step failed', [
+                        'step' => $name,
+                        'command' => $cmd,
+                        'exitCode' => $exit,
+                    ]);
 
                     return $exit;
                 }
@@ -133,10 +145,16 @@ Use --only=<step> to run a single step manually.';
             $this->newLine();
             $this->info('Wikidata sync dispatched successfully.');
 
+            Log::info('Wikidata sync dispatched successfully', [
+                'steps' => array_keys($steps),
+                'sequential' => $sequential,
+            ]);
+
             if ($sequential) {
                 $this->info('⏳ Waiting for final jobs to complete...');
                 $this->waitForQueueToDrain();
                 $this->info('✓ All jobs complete!');
+                Log::info('Wikidata sync completed (sequential mode)');
             } else {
                 $this->line('Jobs will continue processing on the queue.');
             }

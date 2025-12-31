@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -59,13 +60,26 @@ class Album extends Model
         );
     }
 
+    /**
+     * Modify the query used to retrieve models when making all searchable.
+     */
+    protected function makeAllSearchableUsing(Builder $query): Builder
+    {
+        return $query
+            ->select(['id', 'title', 'description', 'release_year', 'artist_id'])
+            ->with('artist:id,name');
+    }
+
     public function toSearchableArray(): array
     {
         return [
             'id' => (string) $this->id,
             'title' => $this->title,
+            'description' => $this->description,
             'release_year' => $this->release_year,
-            'artist_name' => $this->artist?->name,
+            'artist_name' => $this->relationLoaded('artist')
+                ? $this->artist?->name
+                : $this->artist()->value('name'),
         ];
     }
 }

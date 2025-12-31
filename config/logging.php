@@ -54,7 +54,7 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'single,stderr')),
+            'channels' => explode(',', (string) env('LOG_STACK', 'daily,stderr')),
             'ignore_exceptions' => false,
         ],
 
@@ -125,12 +125,6 @@ return [
 
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
-        ],
-
-        'wikidata' => [
-            'driver' => 'stack',
-            'channels' => ['wikidata-genres', 'wikidata-artists', 'wikidata-sync'],
-            'ignore_exceptions' => false,
         ],
 
     ],
