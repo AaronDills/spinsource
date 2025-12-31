@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AlbumController;
+use App\Http\Controllers\ArtistController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +12,7 @@ Route::get('/', function () {
 
 Route::get('/search', [SearchController::class, 'search'])->name('search');
 Route::get('/album/{album}', [AlbumController::class, 'show'])->name('album.show');
+Route::get('/artist/{artist}', [ArtistController::class, 'show'])->name('artist.show');
 
 Route::get('/dashboard', function () {
     return view('dashboard');

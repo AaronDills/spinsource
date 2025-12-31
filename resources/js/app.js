@@ -38,8 +38,7 @@ Alpine.data('searchAutocomplete', () => ({
         if (result.type === 'album') {
             window.location.href = `/album/${result.id}`;
         } else if (result.type === 'artist') {
-            // Future: navigate to artist page
-            console.log('Artist selected:', result);
+            window.location.href = `/artist/${result.id}`;
         }
         this.open = false;
     },
