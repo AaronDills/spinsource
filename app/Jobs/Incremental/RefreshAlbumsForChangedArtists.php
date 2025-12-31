@@ -7,7 +7,7 @@ use App\Jobs\WikidataJob;
 use App\Models\Album;
 use App\Models\Artist;
 use App\Models\IngestionCheckpoint;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -87,7 +87,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
 
         $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $qidsInDb));
 
-        $sparql = Sparql::load('incremental/albums_for_artists', [
+        $sparql = DataSourceQuery::get('incremental/albums_for_artists', 'wikidata', [
             'values' => $values,
         ]);
 

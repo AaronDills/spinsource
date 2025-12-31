@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Country;
 use App\Models\Genre;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Log;
 
@@ -43,7 +43,7 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
             $afterFilter = "FILTER(?oid > {$this->afterOid})";
         }
 
-        $sparql = Sparql::load('genres', [
+        $sparql = DataSourceQuery::get('genres', 'wikidata', [
             'limit' => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);

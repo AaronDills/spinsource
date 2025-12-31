@@ -5,7 +5,7 @@ namespace App\Jobs\Incremental;
 use App\Jobs\WikidataJob;
 use App\Models\Country;
 use App\Models\Genre;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -32,7 +32,7 @@ class EnrichChangedGenres extends WikidataJob
 
         $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $this->genreQids));
 
-        $sparql = Sparql::load('incremental/genre_enrich', [
+        $sparql = DataSourceQuery::get('incremental/genre_enrich', 'wikidata', [
             'values' => $values,
         ]);
 

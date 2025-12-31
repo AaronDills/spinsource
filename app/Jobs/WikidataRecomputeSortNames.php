@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Artist;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -35,7 +35,7 @@ class WikidataRecomputeSortNames extends WikidataJob
 
         $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $artistQids));
 
-        $sparql = Sparql::load('artist_name_components', ['values' => $values]);
+        $sparql = DataSourceQuery::get('artist_name_components', 'wikidata', ['values' => $values]);
         $response = $this->executeWdqsRequest($sparql);
 
         if ($response === null) {

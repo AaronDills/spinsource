@@ -5,7 +5,7 @@ namespace App\Jobs;
 use App\Enums\AlbumType;
 use App\Models\Album;
 use App\Models\Artist;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Log;
 
@@ -72,7 +72,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
         // Use an aggregated SPARQL template if you adopt it:
         // resources/sparql/albums_agg.sparql
         // If you keep your existing template name "albums", this will still work.
-        $sparql = Sparql::load('albums', [
+        $sparql = DataSourceQuery::get('albums', 'wikidata', [
             'values' => $values,
         ]);
 

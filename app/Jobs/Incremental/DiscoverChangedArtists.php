@@ -5,7 +5,7 @@ namespace App\Jobs\Incremental;
 use App\Jobs\WikidataEnrichArtists;
 use App\Jobs\WikidataJob;
 use App\Models\IngestionCheckpoint;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -42,7 +42,7 @@ class DiscoverChangedArtists extends WikidataJob
             $afterModifiedFilter = "FILTER(?modified > \"{$this->afterModified}\"^^xsd:dateTime)";
         }
 
-        $sparql = Sparql::load('incremental/changed_artists_since', [
+        $sparql = DataSourceQuery::get('incremental/changed_artists_since', 'wikidata', [
             'since' => $since,
             'after_modified_filter' => $afterModifiedFilter,
             'limit' => $this->pageSize,

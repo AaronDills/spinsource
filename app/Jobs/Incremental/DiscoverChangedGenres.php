@@ -4,7 +4,7 @@ namespace App\Jobs\Incremental;
 
 use App\Jobs\WikidataJob;
 use App\Models\IngestionCheckpoint;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -40,7 +40,7 @@ class DiscoverChangedGenres extends WikidataJob
             $afterModifiedFilter = "FILTER(?modified > \"{$this->afterModified}\"^^xsd:dateTime)";
         }
 
-        $sparql = Sparql::load('incremental/changed_genres_since', [
+        $sparql = DataSourceQuery::get('incremental/changed_genres_since', 'wikidata', [
             'since' => $since,
             'after_modified_filter' => $afterModifiedFilter,
             'limit' => $this->pageSize,

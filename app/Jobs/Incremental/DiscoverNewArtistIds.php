@@ -5,7 +5,7 @@ namespace App\Jobs\Incremental;
 use App\Jobs\WikidataEnrichArtists;
 use App\Jobs\WikidataJob;
 use App\Models\IngestionCheckpoint;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -37,7 +37,7 @@ class DiscoverNewArtistIds extends WikidataJob
             $afterFilter = "FILTER(?oid > {$afterOid})";
         }
 
-        $sparql = Sparql::load('incremental/new_artists', [
+        $sparql = DataSourceQuery::get('incremental/new_artists', 'wikidata', [
             'limit' => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);

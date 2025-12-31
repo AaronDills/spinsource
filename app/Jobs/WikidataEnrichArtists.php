@@ -7,7 +7,7 @@ use App\Models\Artist;
 use App\Models\ArtistLink;
 use App\Models\Country;
 use App\Models\Genre;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -84,7 +84,7 @@ class WikidataEnrichArtists extends WikidataJob
      */
     private function fetchBasicData(string $values): ?array
     {
-        $sparql = Sparql::load('artist_enrich_basic', ['values' => $values]);
+        $sparql = DataSourceQuery::get('artist_enrich_basic', 'wikidata', ['values' => $values]);
         $response = $this->executeWdqsRequest($sparql);
 
         if ($response === null) {
@@ -135,7 +135,7 @@ class WikidataEnrichArtists extends WikidataJob
      */
     private function fetchGenres(string $values): ?array
     {
-        $sparql = Sparql::load('artist_enrich_genres', ['values' => $values]);
+        $sparql = DataSourceQuery::get('artist_enrich_genres', 'wikidata', ['values' => $values]);
         $response = $this->executeWdqsRequest($sparql);
 
         if ($response === null) {
@@ -171,7 +171,7 @@ class WikidataEnrichArtists extends WikidataJob
      */
     private function fetchLinks(string $values): ?array
     {
-        $sparql = Sparql::load('artist_enrich_links', ['values' => $values]);
+        $sparql = DataSourceQuery::get('artist_enrich_links', 'wikidata', ['values' => $values]);
         $response = $this->executeWdqsRequest($sparql);
 
         if ($response === null) {

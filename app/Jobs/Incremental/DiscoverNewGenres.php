@@ -5,7 +5,7 @@ namespace App\Jobs\Incremental;
 use App\Jobs\WikidataJob;
 use App\Jobs\WikidataSeedGenres;
 use App\Models\IngestionCheckpoint;
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -35,7 +35,7 @@ class DiscoverNewGenres extends WikidataJob
             $afterFilter = "FILTER(?oid > {$afterOid})";
         }
 
-        $sparql = Sparql::load('incremental/new_genres', [
+        $sparql = DataSourceQuery::get('incremental/new_genres', 'wikidata', [
             'limit' => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);

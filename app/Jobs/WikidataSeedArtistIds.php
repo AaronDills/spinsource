@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Support\Sparql;
+use App\Models\DataSourceQuery;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Log;
 
@@ -45,7 +45,7 @@ class WikidataSeedArtistIds extends WikidataJob implements ShouldBeUnique
             $afterFilter = "FILTER(?oid > {$this->afterOid})";
         }
 
-        $sparql = Sparql::load('artist_ids', [
+        $sparql = DataSourceQuery::get('artist_ids', 'wikidata', [
             'limit' => $this->pageSize,
             'after_filter' => $afterFilter,
         ]);
