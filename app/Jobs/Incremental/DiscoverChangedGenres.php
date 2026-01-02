@@ -6,11 +6,20 @@ use App\Jobs\WikidataJob;
 use App\Models\DataSourceQuery;
 use App\Models\IngestionCheckpoint;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Incremental discovery of CHANGED genre entities since last run.
  * Uses schema:dateModified to find recently modified genres.
+ *
+ * ## True delta approach
+ *
+ * Queries Wikidata's schema:dateModified property with a 48-hour overlap buffer.
+ * Dispatches EnrichChangedGenres to update the found genres.
+ *
+ * ## Tuning
+ *
+ * - pageSize: Number of changed genres per page (default 200)
+ * - Genres change rarely, so small page sizes are usually sufficient
  */
 class DiscoverChangedGenres extends WikidataJob
 {
@@ -29,11 +38,7 @@ class DiscoverChangedGenres extends WikidataJob
         $sinceTs = $checkpoint->getChangedAtWithBuffer(48);
         $since = $sinceTs ? $sinceTs->toIso8601String() : Carbon::now()->subWeek()->toIso8601String();
 
-        Log::info('Incremental: Discover changed genres start', [
-            'since' => $since,
-            'afterModified' => $this->afterModified,
-            'pageSize' => $this->pageSize,
-        ]);
+        $this->startJobRun($this->afterModified ?? $since);
 
         $afterModifiedFilter = '';
         if ($this->afterModified) {
@@ -47,18 +52,19 @@ class DiscoverChangedGenres extends WikidataJob
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
+        $this->incrementApiCalls();
 
         if ($response === null) {
-            return; // Rate limited, job released
+            $this->failJobRun('Rate limited - job released for retry');
+
+            return;
         }
 
         $bindings = $response->json('results.bindings', []);
         $count = count($bindings);
 
         if ($count === 0) {
-            Log::info('Incremental: No changed genres found', [
-                'since' => $since,
-            ]);
+            $this->finishJobRun($this->afterModified ?? $since);
 
             return;
         }
@@ -83,15 +89,10 @@ class DiscoverChangedGenres extends WikidataJob
 
         $qids = array_values(array_unique($qids));
 
-        Log::info('Incremental: Changed genres discovered', [
-            'since' => $since,
-            'count' => $count,
-            'uniqueQids' => count($qids),
-            'maxModified' => $maxModified?->toIso8601String(),
-        ]);
+        $this->incrementProcessed($count);
+        $this->incrementUpdated(count($qids));
 
         // Enrich changed genres by re-fetching from the main genres SPARQL
-        // Note: genres are small enough that we can process inline
         if (! empty($qids)) {
             EnrichChangedGenres::dispatch($qids);
         }
@@ -101,16 +102,11 @@ class DiscoverChangedGenres extends WikidataJob
             $checkpoint->bumpChangedAt($maxModified);
         }
 
-        Log::info('Incremental: Changed genres processed', [
-            'qidsToEnrich' => count($qids),
-            'newLastChangedAt' => $maxModified?->toIso8601String(),
-        ]);
+        $this->finishJobRun($maxModified?->toIso8601String());
 
         // Continue paging if we got a full page
         if ($count === $this->pageSize && $maxModified) {
             self::dispatch($this->pageSize, $maxModified->toIso8601String());
-
-            Log::info('Incremental: Dispatched next changed genre page');
         }
     }
 }

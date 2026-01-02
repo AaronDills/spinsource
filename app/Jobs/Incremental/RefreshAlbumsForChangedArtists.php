@@ -8,11 +8,25 @@ use App\Models\Album;
 use App\Models\Artist;
 use App\Models\DataSourceQuery;
 use App\Models\IngestionCheckpoint;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Refresh albums for artists that have changed since last run.
  * Uses the changed_artist_qids stored in the checkpoint meta.
+ *
+ * ## How it works
+ *
+ * Reads changed artist Q-IDs from checkpoint meta (or accepts them directly),
+ * then queries Wikidata for those artists' albums and upserts them locally.
+ *
+ * ## Chunking strategy
+ *
+ * Large batches are split into chunks to avoid WDQS query timeouts.
+ * First chunk is processed inline, remaining chunks are dispatched as new jobs.
+ *
+ * ## Tuning
+ *
+ * - chunkSize: Number of artists per SPARQL query (default 25)
+ * - Lower values for more reliable queries, higher for faster processing
  */
 class RefreshAlbumsForChangedArtists extends WikidataJob
 {
@@ -41,15 +55,11 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
         }
 
         if (empty($qids)) {
-            Log::info('Incremental: No changed artists for album refresh');
-
             return;
         }
 
-        Log::info('Incremental: Refresh albums for changed artists start', [
-            'artistQids' => count($qids),
-            'chunkSize' => $this->chunkSize,
-        ]);
+        $this->startJobRun();
+        $this->incrementProcessed(count($qids));
 
         // Process in chunks to avoid huge SPARQL queries
         $chunks = array_chunk($qids, $this->chunkSize);
@@ -64,9 +74,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             }
         }
 
-        Log::info('Incremental: Album refresh jobs dispatched', [
-            'totalChunks' => count($chunks),
-        ]);
+        $this->finishJobRun();
     }
 
     private function processArtistChunk(array $artistQids): void
@@ -77,7 +85,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             ->get(['id', 'wikidata_qid']);
 
         if ($artists->isEmpty()) {
-            Log::info('Incremental: No local artists found for chunk');
+            $this->incrementSkipped(count($artistQids));
 
             return;
         }
@@ -92,6 +100,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
+        $this->incrementApiCalls();
 
         if ($response === null) {
             return; // Rate limited, job released
@@ -100,10 +109,6 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
         $bindings = $response->json('results.bindings', []);
 
         if (empty($bindings)) {
-            Log::info('Incremental: No albums found for artist chunk', [
-                'artistCount' => count($qidsInDb),
-            ]);
-
             return;
         }
 
@@ -197,10 +202,8 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             ]
         );
 
-        Log::info('Incremental: Albums upserted for changed artists', [
-            'albumsUpserted' => count($rows),
-            'skippedNoTitle' => $skippedNoTitle,
-        ]);
+        $this->incrementUpdated(count($rows));
+        $this->incrementSkipped($skippedNoTitle);
     }
 
     private function mapAlbumType(?string $qid): string

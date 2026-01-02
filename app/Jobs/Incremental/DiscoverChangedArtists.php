@@ -7,11 +7,22 @@ use App\Jobs\WikidataJob;
 use App\Models\DataSourceQuery;
 use App\Models\IngestionCheckpoint;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Incremental discovery of CHANGED artist entities since last run.
  * Uses schema:dateModified to find recently modified artists.
+ *
+ * ## True delta approach
+ *
+ * This job queries Wikidata's schema:dateModified property to find artists
+ * modified since the last successful run. A 48-hour overlap buffer is applied
+ * to handle edge cases and eventual consistency.
+ *
+ * ## Tuning
+ *
+ * - pageSize: Number of changed artists per page (default 500)
+ * - batchSize: Size of enrichment job batches (default 10)
+ * - Increase pageSize to process more per run, decrease if WDQS times out
  */
 class DiscoverChangedArtists extends WikidataJob
 {
@@ -31,11 +42,7 @@ class DiscoverChangedArtists extends WikidataJob
         $sinceTs = $checkpoint->getChangedAtWithBuffer(48);
         $since = $sinceTs ? $sinceTs->toIso8601String() : Carbon::now()->subWeek()->toIso8601String();
 
-        Log::info('Incremental: Discover changed artists start', [
-            'since' => $since,
-            'afterModified' => $this->afterModified,
-            'pageSize' => $this->pageSize,
-        ]);
+        $this->startJobRun($this->afterModified ?? $since);
 
         $afterModifiedFilter = '';
         if ($this->afterModified) {
@@ -49,18 +56,19 @@ class DiscoverChangedArtists extends WikidataJob
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
+        $this->incrementApiCalls();
 
         if ($response === null) {
-            return; // Rate limited, job released
+            $this->failJobRun('Rate limited - job released for retry');
+
+            return;
         }
 
         $bindings = $response->json('results.bindings', []);
         $count = count($bindings);
 
         if ($count === 0) {
-            Log::info('Incremental: No changed artists found', [
-                'since' => $since,
-            ]);
+            $this->finishJobRun($this->afterModified ?? $since);
 
             return;
         }
@@ -85,12 +93,8 @@ class DiscoverChangedArtists extends WikidataJob
 
         $qids = array_values(array_unique($qids));
 
-        Log::info('Incremental: Changed artists discovered', [
-            'since' => $since,
-            'count' => $count,
-            'uniqueQids' => count($qids),
-            'maxModified' => $maxModified?->toIso8601String(),
-        ]);
+        $this->incrementProcessed($count);
+        $this->incrementUpdated(count($qids));
 
         // Dispatch enrichment jobs in batches
         $chunks = array_chunk($qids, max(10, $this->batchSize));
@@ -107,16 +111,11 @@ class DiscoverChangedArtists extends WikidataJob
             $checkpoint->setMeta('changed_artist_qids', array_unique(array_merge($existingQids, $qids)));
         }
 
-        Log::info('Incremental: Changed artists processed', [
-            'enrichJobsDispatched' => count($chunks),
-            'newLastChangedAt' => $maxModified?->toIso8601String(),
-        ]);
+        $this->finishJobRun($maxModified?->toIso8601String());
 
         // Continue paging if we got a full page
         if ($count === $this->pageSize && $maxModified) {
             self::dispatch($this->pageSize, $this->batchSize, $maxModified->toIso8601String());
-
-            Log::info('Incremental: Dispatched next changed artist page');
         }
     }
 }

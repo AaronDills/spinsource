@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Jobs\Concerns\HandlesWikidataRateLimits;
+use App\Jobs\Concerns\TracksJobMetrics;
 use Carbon\Carbon;
 
 /**
@@ -11,6 +12,7 @@ use Carbon\Carbon;
  * Extends RateLimitedApiJob for common queue/retry configuration.
  * Adds Wikidata-specific functionality:
  * - SPARQL request execution via HandlesWikidataRateLimits trait
+ * - Job run metrics tracking via TracksJobMetrics trait
  * - Helper methods for parsing Wikidata responses (QIDs, dates)
  *
  * Child classes should call parent::__construct() in their constructor.
@@ -18,6 +20,7 @@ use Carbon\Carbon;
 abstract class WikidataJob extends RateLimitedApiJob
 {
     use HandlesWikidataRateLimits;
+    use TracksJobMetrics;
 
     /**
      * Get the queue name for Wikidata jobs.

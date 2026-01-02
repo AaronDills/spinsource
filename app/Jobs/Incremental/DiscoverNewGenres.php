@@ -6,11 +6,20 @@ use App\Jobs\WikidataJob;
 use App\Jobs\WikidataSeedGenres;
 use App\Models\DataSourceQuery;
 use App\Models\IngestionCheckpoint;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Incremental discovery of NEW genre entities by O-ID cursor.
  * Used by weekly sync to find genres added since last checkpoint.
+ *
+ * ## How it works
+ *
+ * Uses O-ID (Wikidata ordinal ID) to find genres created since the last run.
+ * Dispatches WikidataSeedGenres to actually import the new genres.
+ *
+ * ## Tuning
+ *
+ * - pageSize: Controls discovery batch size (default 200)
+ * - Genres are relatively rare compared to artists, so smaller page size is fine
  */
 class DiscoverNewGenres extends WikidataJob
 {
@@ -25,10 +34,7 @@ class DiscoverNewGenres extends WikidataJob
         $checkpoint = IngestionCheckpoint::forKey('genres');
         $afterOid = $checkpoint->last_seen_oid;
 
-        Log::info('Incremental: Discover new genres start', [
-            'afterOid' => $afterOid,
-            'pageSize' => $this->pageSize,
-        ]);
+        $this->startJobRun((string) $afterOid);
 
         $afterFilter = '';
         if ($afterOid !== null && $afterOid > 0) {
@@ -41,18 +47,19 @@ class DiscoverNewGenres extends WikidataJob
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
+        $this->incrementApiCalls();
 
         if ($response === null) {
-            return; // Rate limited, job released
+            $this->failJobRun('Rate limited - job released for retry');
+
+            return;
         }
 
         $bindings = $response->json('results.bindings', []);
         $count = count($bindings);
 
         if ($count === 0) {
-            Log::info('Incremental: No new genres found', [
-                'afterOid' => $afterOid,
-            ]);
+            $this->finishJobRun((string) $afterOid);
 
             return;
         }
@@ -66,11 +73,8 @@ class DiscoverNewGenres extends WikidataJob
             }
         }
 
-        Log::info('Incremental: New genres discovered', [
-            'afterOid' => $afterOid,
-            'count' => $count,
-            'maxOid' => $maxOid,
-        ]);
+        $this->incrementProcessed($count);
+        $this->incrementCreated($count);
 
         // Dispatch the existing genre seeder from the checkpoint
         // It will handle paging from the afterOid
@@ -84,8 +88,6 @@ class DiscoverNewGenres extends WikidataJob
         // Update checkpoint
         $checkpoint->bumpSeenOid($maxOid);
 
-        Log::info('Incremental: Genre checkpoint updated', [
-            'newLastSeenOid' => $maxOid,
-        ]);
+        $this->finishJobRun((string) $maxOid);
     }
 }

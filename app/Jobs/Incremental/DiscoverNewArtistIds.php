@@ -6,11 +6,24 @@ use App\Jobs\WikidataEnrichArtists;
 use App\Jobs\WikidataJob;
 use App\Models\DataSourceQuery;
 use App\Models\IngestionCheckpoint;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Incremental discovery of NEW artist entities by O-ID cursor.
  * Used by weekly sync to find artists added since last checkpoint.
+ *
+ * ## Tuning the page size (N)
+ *
+ * - pageSize controls how many artists are discovered per run
+ * - Smaller values (100-200): Shorter jobs, gentler on WDQS, but more runs needed
+ * - Larger values (500-1000): Fewer runs, but risk WDQS timeouts on complex queries
+ *
+ * ## How the cursor works
+ *
+ * This job uses numeric O-ID (Wikidata ordinal ID) as a cursor. Each run:
+ * 1. Queries artists with O-ID greater than the last seen O-ID
+ * 2. Processes the page and dispatches enrichment jobs
+ * 3. Updates the checkpoint with the max O-ID seen
+ * 4. Self-chains if a full page was returned
  */
 class DiscoverNewArtistIds extends WikidataJob
 {
@@ -26,11 +39,7 @@ class DiscoverNewArtistIds extends WikidataJob
         $checkpoint = IngestionCheckpoint::forKey('artists');
         $afterOid = $checkpoint->last_seen_oid;
 
-        Log::info('Incremental: Discover new artist IDs start', [
-            'afterOid' => $afterOid,
-            'pageSize' => $this->pageSize,
-            'batchSize' => $this->batchSize,
-        ]);
+        $this->startJobRun((string) $afterOid);
 
         $afterFilter = '';
         if ($afterOid !== null && $afterOid > 0) {
@@ -43,18 +52,19 @@ class DiscoverNewArtistIds extends WikidataJob
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
+        $this->incrementApiCalls();
 
         if ($response === null) {
-            return; // Rate limited, job released
+            $this->failJobRun('Rate limited - job released for retry');
+
+            return;
         }
 
         $bindings = $response->json('results.bindings', []);
         $count = count($bindings);
 
         if ($count === 0) {
-            Log::info('Incremental: No new artists found', [
-                'afterOid' => $afterOid,
-            ]);
+            $this->finishJobRun((string) $afterOid);
 
             return;
         }
@@ -76,12 +86,8 @@ class DiscoverNewArtistIds extends WikidataJob
 
         $qids = array_values(array_unique($qids));
 
-        Log::info('Incremental: New artist IDs discovered', [
-            'afterOid' => $afterOid,
-            'count' => $count,
-            'uniqueQids' => count($qids),
-            'maxOid' => $maxOid,
-        ]);
+        $this->incrementProcessed($count);
+        $this->incrementCreated(count($qids));
 
         // Dispatch enrichment jobs in batches
         $chunks = array_chunk($qids, max(10, $this->batchSize));
@@ -92,16 +98,11 @@ class DiscoverNewArtistIds extends WikidataJob
         // Update checkpoint
         $checkpoint->bumpSeenOid($maxOid);
 
-        Log::info('Incremental: Artist checkpoint updated', [
-            'newLastSeenOid' => $maxOid,
-            'enrichJobsDispatched' => count($chunks),
-        ]);
+        $this->finishJobRun((string) $maxOid);
 
         // Continue paging if we got a full page
         if ($count === $this->pageSize) {
             self::dispatch($this->pageSize, $this->batchSize);
-
-            Log::info('Incremental: Dispatched next new artist page');
         }
     }
 }

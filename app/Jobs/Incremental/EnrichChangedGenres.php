@@ -6,11 +6,15 @@ use App\Jobs\WikidataJob;
 use App\Models\Country;
 use App\Models\DataSourceQuery;
 use App\Models\Genre;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Enrich a batch of changed genre QIDs.
  * Re-fetches full genre data from Wikidata and upserts.
+ *
+ * ## How it works
+ *
+ * Takes an array of genre Q-IDs, fetches their current data from Wikidata,
+ * and updates the local database. Also resolves parent genre relationships.
  */
 class EnrichChangedGenres extends WikidataJob
 {
@@ -26,9 +30,7 @@ class EnrichChangedGenres extends WikidataJob
             return;
         }
 
-        Log::info('Incremental: Enrich changed genres start', [
-            'count' => count($this->genreQids),
-        ]);
+        $this->startJobRun();
 
         $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $this->genreQids));
 
@@ -37,15 +39,19 @@ class EnrichChangedGenres extends WikidataJob
         ]);
 
         $response = $this->executeWdqsRequest($sparql);
+        $this->incrementApiCalls();
 
         if ($response === null) {
-            return; // Rate limited, job released
+            $this->failJobRun('Rate limited - job released for retry');
+
+            return;
         }
 
         $bindings = $response->json('results.bindings', []);
 
         if (empty($bindings)) {
-            Log::info('Incremental: No genre data returned');
+            $this->incrementSkipped(count($this->genreQids));
+            $this->finishJobRun();
 
             return;
         }
@@ -56,6 +62,8 @@ class EnrichChangedGenres extends WikidataJob
         foreach ($bindings as $row) {
             $genreQid = $this->qidFromEntityUrl(data_get($row, 'genre.value'));
             if (! $genreQid) {
+                $this->incrementSkipped();
+
                 continue;
             }
 
@@ -99,14 +107,14 @@ class EnrichChangedGenres extends WikidataJob
             $upserted++;
         }
 
+        $this->incrementProcessed(count($this->genreQids));
+        $this->incrementUpdated($upserted);
+
         if (! empty($pendingParents)) {
             $this->resolveParents($pendingParents);
         }
 
-        Log::info('Incremental: Changed genres enriched', [
-            'requested' => count($this->genreQids),
-            'upserted' => $upserted,
-        ]);
+        $this->finishJobRun();
     }
 
     private function resolveParents(array $pendingParents): void
