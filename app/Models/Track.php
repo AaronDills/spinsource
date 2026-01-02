@@ -13,6 +13,7 @@ class Track extends Model
         'musicbrainz_release_id',
         'title',
         'position',
+        'number',
         'disc_number',
         'length_ms',
     ];

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Album;
 use App\Models\Track;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
@@ -78,12 +79,15 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     /**
      * Fetch all releases for a release group.
      *
+     * Includes media to get format and track-count for scoring.
+     *
      * @return array|null Null if rate-limited
      */
     private function fetchReleases(string $releaseGroupId): ?array
     {
         $response = $this->executeMusicBrainzRequest('release', [
             'release-group' => $releaseGroupId,
+            'inc' => 'media',
             'limit' => 100,
         ]);
 
@@ -183,6 +187,10 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
     /**
      * Upsert tracks to the database.
+     *
+     * Uses atomic transaction to prevent partial deletes if insert fails.
+     * Position is computed as a stable numeric value even for vinyl-style
+     * track numbers like "A1". Raw number is preserved separately.
      */
     private function upsertTracks(Album $album, string $releaseId, array $media): void
     {
@@ -191,16 +199,27 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
         foreach ($media as $medium) {
             $discNumber = $medium['position'] ?? 1;
+            $fallbackPosition = 0;
 
             foreach ($medium['tracks'] ?? [] as $track) {
+                $fallbackPosition++;
                 $recording = $track['recording'] ?? [];
+
+                // Raw track number from MusicBrainz (may be "A1", "B2", etc.)
+                $rawNumber = $track['number'] ?? null;
+
+                // Compute numeric position:
+                // 1. Prefer explicit 'position' from MB if present and valid
+                // 2. Otherwise use fallback counter (1, 2, 3...) per medium
+                $position = $this->parseTrackPosition($track, $fallbackPosition);
 
                 $tracks[] = [
                     'album_id' => $album->id,
                     'musicbrainz_recording_id' => $recording['id'] ?? null,
                     'musicbrainz_release_id' => $releaseId,
                     'title' => $track['title'] ?? $recording['title'] ?? 'Unknown',
-                    'position' => $track['position'] ?? $track['number'] ?? 0,
+                    'position' => $position,
+                    'number' => $rawNumber,
                     'disc_number' => $discNumber,
                     'length_ms' => $track['length'] ?? $recording['length'] ?? null,
                     'created_at' => $now,
@@ -218,9 +237,26 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
             return;
         }
 
-        // Delete existing tracks and insert new ones
-        Track::where('album_id', $album->id)->delete();
-        Track::insert($tracks);
+        // Atomic: either all tracks are replaced or none are.
+        // Upsert keyed on (album_id, disc_number, position) updates existing rows.
+        DB::transaction(function () use ($album, $tracks) {
+            Track::upsert(
+                $tracks,
+                ['album_id', 'disc_number', 'position'],
+                ['musicbrainz_recording_id', 'musicbrainz_release_id', 'title', 'number', 'length_ms', 'updated_at']
+            );
+
+            // Remove stale tracks not in the new set
+            // Build a set of valid (disc_number, position) pairs
+            $validKeys = collect($tracks)
+                ->map(fn ($t) => $t['disc_number'].':'.$t['position'])
+                ->all();
+
+            Track::where('album_id', $album->id)
+                ->get(['id', 'disc_number', 'position'])
+                ->filter(fn ($t) => ! in_array($t->disc_number.':'.$t->position, $validKeys))
+                ->each(fn ($t) => $t->delete());
+        });
 
         Log::info('MusicBrainz: Tracks saved', [
             'albumId' => $album->id,
@@ -228,5 +264,29 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
             'releaseId' => $releaseId,
             'trackCount' => count($tracks),
         ]);
+    }
+
+    /**
+     * Parse track position to a stable numeric value.
+     *
+     * MusicBrainz provides:
+     * - 'position': Usually a 1-indexed numeric position within the medium
+     * - 'number': Display number, may be "A1", "B2" for vinyl, or numeric
+     *
+     * We prefer 'position' when valid, otherwise use the fallback counter.
+     */
+    private function parseTrackPosition(array $track, int $fallback): int
+    {
+        // Check for explicit numeric position from MusicBrainz
+        if (isset($track['position'])) {
+            $pos = (int) $track['position'];
+            if ($pos > 0) {
+                return $pos;
+            }
+        }
+
+        // Fallback: use sequential counter per medium
+        // This handles vinyl tracks ("A1", "B2") and missing data gracefully
+        return $fallback;
     }
 }
