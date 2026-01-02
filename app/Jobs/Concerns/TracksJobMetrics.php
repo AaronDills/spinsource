@@ -246,4 +246,20 @@ trait TracksJobMetrics
     {
         $this->jobRun?->setCursor($cursor);
     }
+
+        protected function logStart(string $message, array $context = []): void
+    {
+        Log::info($message, array_merge([
+            'job' => static::class,
+            'phase' => 'start',
+        ], $context));
+    }
+
+    protected function logEnd(string $message, array $context = []): void
+    {
+        Log::info($message, array_merge([
+            'job' => static::class,
+            'phase' => 'end',
+        ], $context));
+    }
 }
