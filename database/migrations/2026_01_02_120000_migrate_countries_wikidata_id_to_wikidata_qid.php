@@ -15,8 +15,10 @@ return new class extends Migration {
             });
         }
 
-        // 2) Copy data over
-        DB::statement('UPDATE countries SET wikidata_qid = wikidata_id WHERE wikidata_qid IS NULL AND wikidata_id IS NOT NULL');
+        // 2) Copy data over (only if old column exists)
+        if (Schema::hasColumn('countries', 'wikidata_id')) {
+            DB::statement('UPDATE countries SET wikidata_qid = wikidata_id WHERE wikidata_qid IS NULL AND wikidata_id IS NOT NULL');
+        }
 
         // 3) Drop old unique index (name is usually countries_wikidata_id_unique)
         try {
