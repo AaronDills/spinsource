@@ -76,4 +76,17 @@ Alpine.data('searchAutocomplete', () => ({
     }
 }));
 
+Alpine.data('expandableSection', (initialCount = 6) => ({
+    expanded: false,
+    initialCount: initialCount,
+
+    toggle() {
+        this.expanded = !this.expanded;
+    },
+
+    shouldShow(index) {
+        return this.expanded || index < this.initialCount;
+    }
+}));
+
 Alpine.start();

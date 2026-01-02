@@ -9,7 +9,7 @@ class AlbumController extends Controller
 {
     public function show(Album $album): View
     {
-        $album->load('artist.country', 'ratings');
+        $album->load('artist.country', 'ratings', 'tracks');
 
         return view('albums.show', [
             'album' => $album,

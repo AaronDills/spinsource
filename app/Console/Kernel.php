@@ -7,6 +7,7 @@ use App\Jobs\Incremental\DiscoverChangedGenres;
 use App\Jobs\Incremental\DiscoverNewArtistIds;
 use App\Jobs\Incremental\DiscoverNewGenres;
 use App\Jobs\Incremental\RefreshAlbumsForChangedArtists;
+use App\Jobs\MusicBrainzSeedTracklists;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use Illuminate\Support\Facades\Artisan;
@@ -48,6 +49,22 @@ class Kernel extends ConsoleKernel
             ->then(fn () => DiscoverNewArtistIds::dispatch())
             ->then(fn () => DiscoverChangedArtists::dispatch())
             ->then(fn () => RefreshAlbumsForChangedArtists::dispatch());
+
+        /*
+        |--------------------------------------------------------------------------
+        | MusicBrainz Tracklist Sync
+        |--------------------------------------------------------------------------
+        |
+        | Fetches tracklists from MusicBrainz for albums that don't have them.
+        | Runs daily at 3:00 AM. The job self-chains to continue processing.
+        | At ~50 req/min with 2 calls per album, processes ~1,500 albums/hour.
+        |
+        */
+        $schedule->call(fn () => MusicBrainzSeedTracklists::dispatch())
+            ->dailyAt('03:00')
+            ->name('musicbrainz:seed-tracklists')
+            ->onOneServer()
+            ->withoutOverlapping();
 
         /*
         |--------------------------------------------------------------------------

@@ -239,14 +239,19 @@
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Discography</h2>
 
                             @foreach($albumsByType as $section)
-                                <div class="@if(!$loop->first) mt-6 @endif">
+                                <div class="@if(!$loop->first) mt-6 @endif" x-data="expandableSection(6)">
                                     <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
                                         {{ $section['label'] }}
                                         <span class="text-gray-400 dark:text-gray-500 font-normal">({{ $section['albums']->count() }})</span>
                                     </h3>
                                     <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
                                         @foreach($section['albums'] as $album)
-                                            <a href="{{ route('album.show', $album) }}" class="group">
+                                            <a href="{{ route('album.show', $album) }}"
+                                               class="group"
+                                               x-show="shouldShow({{ $loop->index }})"
+                                               x-transition:enter="transition ease-out duration-200"
+                                               x-transition:enter-start="opacity-0 transform scale-95"
+                                               x-transition:enter-end="opacity-100 transform scale-100">
                                                 <div class="aspect-square bg-gray-200 dark:bg-gray-700 rounded overflow-hidden mb-1">
                                                     @if($album->cover_image_url)
                                                         <img src="{{ $album->cover_image_url }}"
@@ -270,6 +275,13 @@
                                             </a>
                                         @endforeach
                                     </div>
+                                    @if($section['albums']->count() > 6)
+                                        <button @click="toggle()"
+                                                class="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline focus:outline-none">
+                                            <span x-show="!expanded">Show all {{ $section['albums']->count() }} releases</span>
+                                            <span x-show="expanded">Show less</span>
+                                        </button>
+                                    @endif
                                 </div>
                             @endforeach
                         </div>

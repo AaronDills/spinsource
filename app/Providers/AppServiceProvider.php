@@ -6,7 +6,6 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
-use Laravel\Pulse\Facades\Pulse;
 use Opcodes\LogViewer\Facades\LogViewer;
 
 class AppServiceProvider extends ServiceProvider
@@ -47,6 +46,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('wikidata-wdqs', function () {
             return Limit::perMinute(
                 config('wikidata.requests_per_minute', 30)
+            );
+        });
+
+        RateLimiter::for('musicbrainz-api', function () {
+            return Limit::perMinute(
+                config('musicbrainz.requests_per_minute', 50)
             );
         });
     }

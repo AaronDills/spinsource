@@ -80,6 +80,35 @@
                         @endif
                     </div>
 
+                    @if($album->tracks->count() > 0)
+                        <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Tracklist</h2>
+                            @php
+                                $tracksByDisc = $album->tracks->groupBy('disc_number');
+                                $hasMultipleDiscs = $tracksByDisc->count() > 1;
+                            @endphp
+
+                            @foreach($tracksByDisc as $discNumber => $tracks)
+                                @if($hasMultipleDiscs)
+                                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2 @if(!$loop->first) mt-6 @endif">
+                                        Disc {{ $discNumber }}
+                                    </h3>
+                                @endif
+                                <ol class="divide-y divide-gray-100 dark:divide-gray-700">
+                                    @foreach($tracks as $track)
+                                        <li class="flex items-center py-2 text-sm">
+                                            <span class="w-8 text-gray-400 dark:text-gray-500 tabular-nums">{{ $track->position }}</span>
+                                            <span class="flex-1 text-gray-900 dark:text-gray-100 truncate">{{ $track->title }}</span>
+                                            @if($track->formatted_length)
+                                                <span class="ml-4 text-gray-400 dark:text-gray-500 tabular-nums">{{ $track->formatted_length }}</span>
+                                            @endif
+                                        </li>
+                                    @endforeach
+                                </ol>
+                            @endforeach
+                        </div>
+                    @endif
+
                     @if($album->wikipedia_url || $album->spotify_album_id || $album->apple_music_album_id)
                         <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
                             <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Listen & Learn More</h2>

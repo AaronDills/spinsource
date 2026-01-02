@@ -4,70 +4,35 @@ namespace App\Jobs;
 
 use App\Jobs\Concerns\HandlesWikidataRateLimits;
 use Carbon\Carbon;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\Middleware\RateLimited;
-use Illuminate\Queue\SerializesModels;
 
 /**
  * Abstract base class for all Wikidata jobs.
  *
- * Consolidates common configuration:
- * - Rate limiting via HandlesWikidataRateLimits trait
- * - Default queue 'wikidata' with dedicated Horizon supervisor
- * - Standard retry/backoff configuration
- * - Common helper methods (qidFromEntityUrl, extractYear)
+ * Extends RateLimitedApiJob for common queue/retry configuration.
+ * Adds Wikidata-specific functionality:
+ * - SPARQL request execution via HandlesWikidataRateLimits trait
+ * - Helper methods for parsing Wikidata responses (QIDs, dates)
  *
  * Child classes should call parent::__construct() in their constructor.
  */
-abstract class WikidataJob implements ShouldQueue
+abstract class WikidataJob extends RateLimitedApiJob
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
     use HandlesWikidataRateLimits;
 
     /**
-     * Maximum number of attempts including rate-limit releases.
-     * Set high to accommodate many 429/403/504 releases.
+     * Get the queue name for Wikidata jobs.
      */
-    public int $tries = 50;
-
-    /**
-     * Maximum number of actual exceptions before failing.
-     * This is the "real" failure limit - rate-limit releases don't count.
-     */
-    public int $maxExceptions = 3;
-
-    /**
-     * Job timeout in seconds.
-     * Override in child classes if needed (e.g., 300 for multi-query jobs).
-     */
-    public int $timeout = 120;
-
-    /**
-     * Backoff schedule (seconds) between retry attempts.
-     * Exponential backoff to handle transient WDQS issues.
-     */
-    public array $backoff = [5, 15, 45, 120, 300];
-
-    /**
-     * Base constructor - sets the wikidata queue.
-     * Child classes should call parent::__construct().
-     */
-    public function __construct()
+    protected function queueName(): string
     {
-        $this->onQueue('wikidata');
+        return 'wikidata';
     }
 
     /**
-     * Middleware applied to all Wikidata jobs.
-     *
-     * @return array<int, object>
+     * Get the rate limiter name for Wikidata jobs.
      */
-    public function middleware(): array
+    protected function rateLimiterName(): string
     {
-        return [new RateLimited('wikidata-wdqs')];
+        return 'wikidata-wdqs';
     }
 
     /**

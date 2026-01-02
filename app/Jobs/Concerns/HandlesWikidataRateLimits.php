@@ -4,14 +4,56 @@ namespace App\Jobs\Concerns;
 
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
+/**
+ * Wikidata SPARQL query execution with rate-limit handling.
+ *
+ * Uses the shared HandlesApiRateLimits trait for common retry logic,
+ * adding Wikidata-specific handling for 403 (IP blocks).
+ */
 trait HandlesWikidataRateLimits
 {
+    use HandlesApiRateLimits;
+
+    /**
+     * Get the config prefix for Wikidata.
+     */
+    protected function configPrefix(): string
+    {
+        return 'wikidata';
+    }
+
+    /**
+     * Get the service name for logging.
+     */
+    protected function serviceName(): string
+    {
+        return 'Wikidata WDQS';
+    }
+
+    /**
+     * Get status code handlers for Wikidata.
+     * Adds 403 handling for IP blocks (longer delay).
+     *
+     * @return array<int, array{message: string, delay: callable}>
+     */
+    protected function rateLimitedStatusHandlers(): array
+    {
+        $handlers = parent::rateLimitedStatusHandlers();
+
+        // Wikidata blocks IPs with 403 - wait longer
+        $handlers[403] = [
+            'message' => 'blocked (403)',
+            'delay' => fn () => 300 + $this->addJitter(300, 30),
+        ];
+
+        return $handlers;
+    }
+
     /**
      * Execute a WDQS request with proper rate-limit handling.
      *
-     * Returns null if a 429 was received (job has been released with delay).
+     * Returns null if rate-limited (job has been released with delay).
      * Returns the Response on success.
      * Throws on other HTTP failures.
      */
@@ -34,48 +76,8 @@ trait HandlesWikidataRateLimits
                 'query' => $sparql,
             ]);
 
-        // Handle 429 Too Many Requests without throwing
-        if ($response->status() === 429) {
-            $delay = $this->computeRetryDelay($response);
-
-            Log::warning('Wikidata WDQS rate limited (429), releasing job', [
-                'job' => static::class,
-                'delay' => $delay,
-            ]);
-
-            $this->release($delay);
-
-            return null;
-        }
-
-        // Handle 403 Forbidden (IP blocked) - wait longer before retry
-        if ($response->status() === 403) {
-            $delay = 300; // 5 minutes - Wikidata blocks typically last a few minutes
-            $delay += (int) ($delay * mt_rand(0, 30) / 100);
-
-            Log::warning('Wikidata WDQS blocked (403), releasing job with long delay', [
-                'job' => static::class,
-                'delay' => $delay,
-            ]);
-
-            $this->release($delay);
-
-            return null;
-        }
-
-        // Handle 504 Gateway Timeout (WDQS overloaded) - retry with delay
-        if ($response->status() === 504) {
-            $delay = (int) config('wikidata.retry_after_fallback', 60);
-            // Add jitter to prevent thundering herd
-            $delay += (int) ($delay * mt_rand(0, 30) / 100);
-
-            Log::warning('Wikidata WDQS timeout (504), releasing job', [
-                'job' => static::class,
-                'delay' => $delay,
-            ]);
-
-            $this->release($delay);
-
+        // Handle rate-limited responses
+        if ($this->handleRateLimitedResponse($response)) {
             return null;
         }
 
@@ -83,30 +85,5 @@ trait HandlesWikidataRateLimits
         $response->throw();
 
         return $response;
-    }
-
-    /**
-     * Compute retry delay from Retry-After header or fallback config.
-     * Adds jitter to prevent thundering herd.
-     */
-    protected function computeRetryDelay(Response $response): int
-    {
-        $retryAfter = $response->header('Retry-After');
-        $fallback = (int) config('wikidata.retry_after_fallback', 60);
-        $cap = (int) config('wikidata.retry_after_cap', 900);
-
-        if ($retryAfter !== null && is_numeric($retryAfter)) {
-            $delay = (int) $retryAfter;
-        } else {
-            $delay = $fallback;
-        }
-
-        // Cap the delay
-        $delay = min($delay, $cap);
-
-        // Add jitter (0-20% of delay)
-        $jitter = (int) ($delay * mt_rand(0, 20) / 100);
-
-        return $delay + $jitter;
     }
 }

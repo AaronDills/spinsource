@@ -58,7 +58,7 @@ class WikidataDispatchEnrichAlbumCovers extends Command
 
         $query->orderBy('id')
             ->select(['id', 'wikidata_id'])
-            ->chunk($batchSize, function ($albums) use (&$dispatched, &$albumsProcessed, $limit, $batchSize) {
+            ->chunk($batchSize, function ($albums) use (&$dispatched, &$albumsProcessed, $limit) {
                 if ($limit !== null && $albumsProcessed >= $limit) {
                     return false; // Stop chunking
                 }
