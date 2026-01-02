@@ -8,7 +8,6 @@
     "require": {
         "php": "^8.2",
         "laravel/framework": "^12.0",
-        "laravel/horizon": "^5.41",
         "laravel/pulse": "^1.4",
         "laravel/scout": "^10.23",
         "laravel/tinker": "^2.10.1",
