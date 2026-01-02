@@ -1,4 +1,4 @@
-// config/logging.php
+<?php
 
 use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\StreamHandler;
@@ -36,11 +36,7 @@ return [
             'processors' => [PsrLogMessageProcessor::class],
         ],
 
-        // ✅ This is the important part: define what Cloud injects
         'laravel-cloud-socket' => [
-            // In most setups this is effectively "log to stderr as JSON"
-            // while Cloud collects/ships it. If Cloud has its own custom driver
-            // you can swap this later, but this works reliably for UI visibility.
             'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'debug'),
             'handler' => StreamHandler::class,
