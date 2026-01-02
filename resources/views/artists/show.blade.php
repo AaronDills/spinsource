@@ -62,18 +62,20 @@
             </div>
         </div>
 
-        @if($albums->count())
-            <h2 class="text-xl font-semibold mt-8">Albums</h2>
-            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                @foreach($albums as $album)
-                    <a href="{{ route('albums.show', $album) }}" class="block bg-gray-50 rounded p-4 hover:bg-gray-100">
-                        <div class="font-semibold">{{ $album->title }}</div>
-                        @if($album->release_year)
-                            <div class="text-sm text-gray-600">{{ $album->release_year }}</div>
-                        @endif
-                    </a>
-                @endforeach
-            </div>
+        @if(count($albumsByType))
+            @foreach($albumsByType as $group)
+                <h2 class="text-xl font-semibold mt-8">{{ $group['label'] }}</h2>
+                <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    @foreach($group['albums'] as $album)
+                        <a href="{{ route('album.show', $album) }}" class="block bg-gray-50 rounded p-4 hover:bg-gray-100">
+                            <div class="font-semibold">{{ $album->title }}</div>
+                            @if($album->release_year)
+                                <div class="text-sm text-gray-600">{{ $album->release_year }}</div>
+                            @endif
+                        </a>
+                    @endforeach
+                </div>
+            @endforeach
         @endif
     </div>
 </div>

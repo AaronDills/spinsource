@@ -71,12 +71,6 @@ class Album extends Model
         return $this->belongsTo(Artist::class);
     }
 
-    // Future expansion point (MusicBrainz: releases/editions)
-    public function releases(): HasMany
-    {
-        return $this->hasMany(Release::class);
-    }
-
     public function tracks(): HasMany
     {
         return $this->hasMany(Track::class)->orderBy('disc_number')->orderBy('position');
