@@ -54,6 +54,7 @@ class WikidataEnrichArtists extends WikidataJob
             $this->logEnd('Enrich artists (no results)', [
                 'count' => count($this->artistQids),
             ]);
+
             return;
         }
 
@@ -66,7 +67,7 @@ class WikidataEnrichArtists extends WikidataJob
             $artistUri = $row['artist']['value'] ?? null;
             $artistQid = $this->wikidata->extractQid($artistUri);
 
-            if (!$artistQid) {
+            if (! $artistQid) {
                 continue;
             }
 
@@ -127,13 +128,13 @@ class WikidataEnrichArtists extends WikidataJob
 
         DB::transaction(function () use ($countriesToUpsert, $artistUpdates, $genresToAttach, $artistLinks) {
             // Countries
-            if (!empty($countriesToUpsert)) {
+            if (! empty($countriesToUpsert)) {
                 Country::upsert(array_values($countriesToUpsert), ['wikidata_qid'], ['name']);
             }
 
             // Map country QIDs to IDs
             $countryIdByQid = collect();
-            if (!empty($countriesToUpsert)) {
+            if (! empty($countriesToUpsert)) {
                 $countryIdByQid = Country::query()
                     ->whereIn('wikidata_qid', array_keys($countriesToUpsert))
                     ->get(['id', 'wikidata_qid'])
@@ -147,7 +148,7 @@ class WikidataEnrichArtists extends WikidataJob
             foreach ($artistUpdates as $qid => $data) {
                 /** @var \App\Models\Artist|null $artist */
                 $artist = $artists->get($qid);
-                if (!$artist) {
+                if (! $artist) {
                     continue;
                 }
 
@@ -186,14 +187,14 @@ class WikidataEnrichArtists extends WikidataJob
             }
 
             // Genres attach
-            if (!empty($genresToAttach)) {
+            if (! empty($genresToAttach)) {
                 $genreRows = Genre::whereIn('wikidata_qid', array_unique(array_merge(...array_values($genresToAttach))))
                     ->get(['id', 'wikidata_qid'])
                     ->keyBy('wikidata_qid');
 
                 foreach ($genresToAttach as $artistQid => $genreQids) {
                     $artist = Artist::where('wikidata_qid', $artistQid)->first();
-                    if (!$artist) {
+                    if (! $artist) {
                         continue;
                     }
 
@@ -204,17 +205,17 @@ class WikidataEnrichArtists extends WikidataJob
                         ->values()
                         ->toArray();
 
-                    if (!empty($genreIds)) {
+                    if (! empty($genreIds)) {
                         $artist->genres()->syncWithoutDetaching($genreIds);
                     }
                 }
             }
 
             // Links
-            if (!empty($artistLinks)) {
+            if (! empty($artistLinks)) {
                 foreach ($artistLinks as $link) {
                     $artist = Artist::where('wikidata_qid', $link['artist_qid'])->first();
-                    if (!$artist) {
+                    if (! $artist) {
                         continue;
                     }
 

@@ -28,6 +28,7 @@ class WikidataDispatchEnrichAlbumCovers extends Command
 
         if ($total === 0) {
             $this->info('No albums found that need cover enrichment.');
+
             return self::SUCCESS;
         }
 

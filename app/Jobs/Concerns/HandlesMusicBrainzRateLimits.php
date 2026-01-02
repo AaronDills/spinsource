@@ -2,6 +2,9 @@
 
 namespace App\Jobs\Concerns;
 
+use GuzzleHttp\Exception\ConnectException as GuzzleConnectException;
+use GuzzleHttp\Exception\RequestException as GuzzleRequestException;
+use Illuminate\Http\Client\ConnectionException as HttpConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
@@ -43,27 +46,148 @@ trait HandlesMusicBrainzRateLimits
     protected function executeMusicBrainzRequest(string $path, array $query = []): ?Response
     {
         $endpoint = rtrim(config('musicbrainz.endpoint'), '/');
-        $ua = config('musicbrainz.user_agent');
+        $ua = $this->buildMusicBrainzUserAgent();
 
         // Always request JSON format
         $query['fmt'] = 'json';
 
-        $response = Http::withHeaders([
-            'Accept' => 'application/json',
-            'User-Agent' => $ua,
-        ])
-            ->connectTimeout(10)
-            ->timeout(30)
-            ->get("{$endpoint}/{$path}", $query);
+        $maxAttempts = (int) config('musicbrainz.max_attempts', 5);
 
-        // Handle rate-limited responses
-        if ($this->handleRateLimitedResponse($response, ['path' => $path])) {
-            return null;
+        $attempt = 0;
+        $lastException = null;
+
+        // Retry loop with exponential backoff + jitter for transient errors.
+        while (++$attempt <= $maxAttempts) {
+            try {
+                $response = Http::withHeaders([
+                    'Accept' => 'application/json',
+                    'User-Agent' => $ua,
+                ])
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->get("{$endpoint}/{$path}", $query);
+
+                $status = $response->status();
+
+                // Success: return the response
+                if ($status >= 200 && $status < 300) {
+                    return $response;
+                }
+
+                // Retry on 429 (rate limit) or 5xx (server errors)
+                if ($status === 429 || ($status >= 500 && $status < 600)) {
+                    // If server provided Retry-After, use computed delay; otherwise use backoff
+                    $delay = ($status === 429)
+                        ? $this->computeRetryDelay($response)
+                        : $this->computeExponentialBackoffWithJitter($attempt);
+
+                    // If this was the last attempt, delegate to existing rate-limit handler
+                    if ($attempt >= $maxAttempts) {
+                        if ($this->handleRateLimitedResponse($response, ['path' => $path])) {
+                            return null;
+                        }
+
+                        // Not handled as a rate-limit; throw to let job fail/inspect
+                        $response->throw();
+                    }
+
+                    sleep($delay);
+
+                    continue;
+                }
+
+                // For other 4xx (except 429), do not retry — throw immediately
+                $response->throw();
+
+            } catch (HttpConnectionException|GuzzleConnectException $e) {
+                // Connection / TLS errors are retryable
+                $lastException = $e;
+
+                if ($attempt >= $maxAttempts) {
+                    throw $e;
+                }
+
+                $delay = $this->computeExponentialBackoffWithJitter($attempt);
+                sleep($delay);
+
+                continue;
+
+            } catch (GuzzleRequestException $e) {
+                // Inspect request exceptions for timeouts or transient TLS/connection issues
+                $lastException = $e;
+
+                if (! $this->isRetryableRequestException($e) || $attempt >= $maxAttempts) {
+                    throw $e;
+                }
+
+                $delay = $this->computeExponentialBackoffWithJitter($attempt);
+                sleep($delay);
+
+                continue;
+            }
         }
 
-        // Throw for other error status codes
-        $response->throw();
+        // If we exhausted attempts and have an exception, rethrow it
+        if ($lastException) {
+            throw $lastException;
+        }
 
-        return $response;
+        return null;
+    }
+
+    /**
+     * Build a MusicBrainz-compliant User-Agent header.
+     */
+    protected function buildMusicBrainzUserAgent(): string
+    {
+        $ua = trim((string) config('musicbrainz.user_agent', ''));
+
+        if (! empty($ua)) {
+            return $ua;
+        }
+
+        $app = config('app.name', 'SpinSource');
+        $version = config('app.version') ?: '1.0';
+        $contact = env('MUSICBRAINZ_CONTACT_EMAIL') ?: env('MAIL_FROM_ADDRESS') ?: 'no-contact@example.com';
+
+        return sprintf('%s/%s (%s)', $app, $version, $contact);
+    }
+
+    /**
+     * Compute an exponential backoff delay with jitter (seconds).
+     * Uses 2^(attempt-1) base and returns a random delay in [0, base].
+     */
+    protected function computeExponentialBackoffWithJitter(int $attempt): int
+    {
+        $cap = (int) config('musicbrainz.retry_after_cap', 300);
+
+        // Base exponential (in seconds)
+        $base = (int) min($cap, (1 << max(0, $attempt - 1)));
+
+        // Return random jitter between 0 and base (inclusive), at least 1s
+        return max(1, random_int(0, max(1, $base)));
+    }
+
+    /**
+     * Determine whether a Guzzle RequestException is retryable (timeouts, TLS, connection issues).
+     */
+    protected function isRetryableRequestException(GuzzleRequestException $e): bool
+    {
+        $ctx = $e->getHandlerContext() ?: [];
+
+        // cURL error number 28 is timeout
+        $errno = $ctx['errno'] ?? null;
+        if ((int) $errno === 28) {
+            return true;
+        }
+
+        // Look for TLS/SSL or timeout substrings in error message/context
+        $error = strtolower($ctx['error'] ?? '').' '.strtolower($e->getMessage());
+
+        if (str_contains($error, 'ssl') || str_contains($error, 'tls') || str_contains($error, 'timeout')) {
+            return true;
+        }
+
+        return false;
     }
 }

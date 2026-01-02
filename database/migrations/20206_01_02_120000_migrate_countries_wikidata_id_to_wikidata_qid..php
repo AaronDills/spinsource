@@ -9,7 +9,7 @@ return new class extends Migration {
     public function up(): void
     {
         // 1) Add the new column (nullable at first)
-        if (!Schema::hasColumn('countries', 'wikidata_qid')) {
+        if (! Schema::hasColumn('countries', 'wikidata_qid')) {
             Schema::table('countries', function (Blueprint $table) {
                 $table->string('wikidata_qid')->nullable()->after('name');
             });
@@ -47,7 +47,7 @@ return new class extends Migration {
     public function down(): void
     {
         // 1) Add old column back
-        if (!Schema::hasColumn('countries', 'wikidata_id')) {
+        if (! Schema::hasColumn('countries', 'wikidata_id')) {
             Schema::table('countries', function (Blueprint $table) {
                 $table->string('wikidata_id')->nullable()->after('name');
             });

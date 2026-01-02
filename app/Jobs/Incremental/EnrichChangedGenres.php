@@ -48,6 +48,7 @@ class EnrichChangedGenres extends WikidataJob
             $this->logEnd('Enrich changed genres (no results)', [
                 'count' => count($this->genreQids),
             ]);
+
             return;
         }
 
@@ -56,7 +57,7 @@ class EnrichChangedGenres extends WikidataJob
 
         foreach ($results as $row) {
             $genreQid = $this->wikidata->extractQid($row['genre']['value'] ?? null);
-            if (!$genreQid) {
+            if (! $genreQid) {
                 continue;
             }
 
@@ -75,12 +76,12 @@ class EnrichChangedGenres extends WikidataJob
         }
 
         DB::transaction(function () use ($countriesToUpsert, $genreUpdates) {
-            if (!empty($countriesToUpsert)) {
+            if (! empty($countriesToUpsert)) {
                 Country::upsert(array_values($countriesToUpsert), ['wikidata_qid'], ['name']);
             }
 
             $countryIdByQid = collect();
-            if (!empty($countriesToUpsert)) {
+            if (! empty($countriesToUpsert)) {
                 $countryIdByQid = Country::whereIn('wikidata_qid', array_keys($countriesToUpsert))
                     ->get(['id', 'wikidata_qid'])
                     ->keyBy('wikidata_qid')

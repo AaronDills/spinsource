@@ -24,6 +24,7 @@ class WikidataRecomputeSortNames extends Command
 
         if ($totalArtists === 0) {
             $this->info('No artists found with Wikidata QIDs.');
+
             return self::SUCCESS;
         }
 

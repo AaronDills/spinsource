@@ -28,6 +28,7 @@ class WikidataSeedGenres extends WikidataJob
         $results = $response['results']['bindings'] ?? [];
         if (empty($results)) {
             $this->logEnd('Seed genres (no results)');
+
             return;
         }
 
@@ -36,7 +37,7 @@ class WikidataSeedGenres extends WikidataJob
 
         foreach ($results as $row) {
             $genreQid = $this->wikidata->extractQid($row['genre']['value'] ?? null);
-            if (!$genreQid) {
+            if (! $genreQid) {
                 continue;
             }
 
@@ -57,13 +58,13 @@ class WikidataSeedGenres extends WikidataJob
         }
 
         DB::transaction(function () use ($countriesToUpsert, $genresToUpsert) {
-            if (!empty($countriesToUpsert)) {
+            if (! empty($countriesToUpsert)) {
                 Country::upsert(array_values($countriesToUpsert), ['wikidata_qid'], ['name']);
             }
 
             // Map country qid to id
             $countryIdByQid = collect();
-            if (!empty($countriesToUpsert)) {
+            if (! empty($countriesToUpsert)) {
                 $countryIdByQid = Country::whereIn('wikidata_qid', array_keys($countriesToUpsert))
                     ->get(['id', 'wikidata_qid'])
                     ->keyBy('wikidata_qid')

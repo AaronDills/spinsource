@@ -51,6 +51,7 @@ class WikidataEnrichAlbumCovers extends WikidataJob
             $this->logEnd('Enrich album covers (no results)', [
                 'count' => count($this->albumQids),
             ]);
+
             return;
         }
 
@@ -59,14 +60,14 @@ class WikidataEnrichAlbumCovers extends WikidataJob
             $album = $row['album'] ?? null;
             $cover = $row['coverImageCommons'] ?? null;
 
-            if (!$album || !$cover) {
+            if (! $album || ! $cover) {
                 continue;
             }
 
             $qid = $this->wikidata->extractQid($album['value'] ?? null);
             $coverValue = $cover['value'] ?? null;
 
-            if (!$qid || !$coverValue) {
+            if (! $qid || ! $coverValue) {
                 continue;
             }
 

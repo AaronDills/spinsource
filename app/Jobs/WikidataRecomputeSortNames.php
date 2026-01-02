@@ -49,12 +49,12 @@ class WikidataRecomputeSortNames extends WikidataJob
         $nameComponents = [];
         foreach ($results as $row) {
             $artist = $row['artist'] ?? null;
-            if (!$artist) {
+            if (! $artist) {
                 continue;
             }
 
             $qid = $this->wikidata->extractQid($artist['value'] ?? null);
-            if (!$qid) {
+            if (! $qid) {
                 continue;
             }
 
