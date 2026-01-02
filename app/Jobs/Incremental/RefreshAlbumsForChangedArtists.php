@@ -73,8 +73,8 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
     {
         // Build artist QID -> local ID map
         $artists = Artist::query()
-            ->whereIn('wikidata_id', $artistQids)
-            ->get(['id', 'wikidata_id']);
+            ->whereIn('wikidata_qid', $artistQids)
+            ->get(['id', 'wikidata_qid']);
 
         if ($artists->isEmpty()) {
             Log::info('Incremental: No local artists found for chunk');
@@ -82,7 +82,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             return;
         }
 
-        $artistQidToId = $artists->pluck('id', 'wikidata_id')->toArray();
+        $artistQidToId = $artists->pluck('id', 'wikidata_qid')->toArray();
         $qidsInDb = array_keys($artistQidToId);
 
         $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $qidsInDb));
@@ -126,12 +126,12 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             }
 
             $byAlbum[$albumQid] ??= [
-                'wikidata_id' => $albumQid,
+                'wikidata_qid' => $albumQid,
                 'title' => null,
                 'artist_id' => $artistQidToId[$artistQid],
                 'album_type_qid' => null,
                 'publication_date' => null,
-                'musicbrainz_release_group_id' => null,
+                'musicbrainz_release_group_mbid' => null,
                 'description' => null,
             ];
 
@@ -143,7 +143,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             $byAlbum[$albumQid]['description'] = $byAlbum[$albumQid]['description'] ?? data_get($row, 'albumDescription.value');
             $byAlbum[$albumQid]['album_type_qid'] = $byAlbum[$albumQid]['album_type_qid'] ?? $this->qidFromEntityUrl(data_get($row, 'albumType.value'));
             $byAlbum[$albumQid]['publication_date'] = $byAlbum[$albumQid]['publication_date'] ?? data_get($row, 'publicationDate.value');
-            $byAlbum[$albumQid]['musicbrainz_release_group_id'] = $byAlbum[$albumQid]['musicbrainz_release_group_id'] ?? data_get($row, 'musicBrainzReleaseGroupId.value');
+            $byAlbum[$albumQid]['musicbrainz_release_group_mbid'] = $byAlbum[$albumQid]['musicbrainz_release_group_mbid'] ?? data_get($row, 'musicBrainzReleaseGroupId.value');
         }
 
         $now = now();
@@ -161,14 +161,16 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
             $releaseYear = $releaseDate ? (int) $releaseDate->year : $this->extractYear($data['publication_date']);
 
             $rows[] = [
-                'wikidata_id' => $data['wikidata_id'],
+                'wikidata_qid' => $data['wikidata_qid'],
                 'title' => $data['title'],
                 'artist_id' => $data['artist_id'],
                 'album_type' => $this->mapAlbumType($data['album_type_qid']),
                 'release_year' => $releaseYear,
                 'release_date' => $releaseDate,
                 'description' => $data['description'],
-                'musicbrainz_release_group_id' => $data['musicbrainz_release_group_id'],
+                'musicbrainz_release_group_mbid' => $data['musicbrainz_release_group_mbid'],
+                'source' => 'wikidata',
+                'source_last_synced_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -180,7 +182,7 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
 
         Album::upsert(
             $rows,
-            ['wikidata_id'],
+            ['wikidata_qid'],
             [
                 'title',
                 'artist_id',
@@ -188,7 +190,9 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
                 'release_year',
                 'release_date',
                 'description',
-                'musicbrainz_release_group_id',
+                'musicbrainz_release_group_mbid',
+                'source',
+                'source_last_synced_at',
                 'updated_at',
             ]
         );

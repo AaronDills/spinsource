@@ -34,12 +34,12 @@ class MusicBrainzSeedTracklists extends MusicBrainzJob implements ShouldBeUnique
     public function handle(): void
     {
         $albums = Album::query()
-            ->whereNotNull('musicbrainz_release_group_id')
+            ->whereNotNull('musicbrainz_release_group_mbid')
             ->whereDoesntHave('tracks')
             ->orderBy('id')
             ->when($this->afterAlbumId, fn ($q) => $q->where('id', '>', $this->afterAlbumId))
             ->limit($this->batchSize)
-            ->get(['id', 'title', 'musicbrainz_release_group_id']);
+            ->get(['id', 'title', 'musicbrainz_release_group_mbid']);
 
         if ($albums->isEmpty()) {
             Log::info('MusicBrainz: Tracklist seeding completed - no more albums to process');

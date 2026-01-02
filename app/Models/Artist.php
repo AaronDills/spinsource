@@ -9,6 +9,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Scout\Searchable;
 
+/**
+ * Artist entity with canonical external IDs and provenance tracking.
+ *
+ * ## External ID Mapping
+ *
+ * | Column                   | Source       | Format                | Example                              |
+ * |--------------------------|--------------|----------------------|--------------------------------------|
+ * | wikidata_qid             | Wikidata     | Q-ID (string)        | Q2831 (Michael Jackson)              |
+ * | musicbrainz_artist_mbid  | MusicBrainz  | UUID (string)        | f27ec8db-af05-4f36-916e-3d57f91ecf5e |
+ * | spotify_artist_id        | Spotify      | Base62 ID            | 3fMbdgg4jU18AjLCKBhRSm               |
+ * | apple_music_artist_id    | Apple Music  | Numeric ID           | 32940                                |
+ * | discogs_artist_id        | Discogs      | Numeric ID           | 15885                                |
+ *
+ * ## Provenance
+ *
+ * - `source`: Primary data source ('wikidata', 'musicbrainz')
+ * - `source_last_synced_at`: Timestamp of last sync from source
+ *
+ * @see \App\Jobs\WikidataEnrichArtists - Populates from Wikidata
+ */
 class Artist extends Model
 {
     use Searchable;
@@ -16,8 +36,8 @@ class Artist extends Model
     protected $fillable = [
         'name',
         'sort_name',
-        'wikidata_id',
-        'musicbrainz_id',
+        'wikidata_qid',
+        'musicbrainz_artist_mbid',
         'spotify_artist_id',
         'apple_music_artist_id',
         'discogs_artist_id',
@@ -32,11 +52,15 @@ class Artist extends Model
         'country_id',
         'album_count',
         'link_count',
+        'artist_type',
+        'source',
+        'source_last_synced_at',
     ];
 
     protected $casts = [
         'album_count' => 'integer',
         'link_count' => 'integer',
+        'source_last_synced_at' => 'datetime',
     ];
 
     public function country(): BelongsTo
@@ -102,7 +126,7 @@ class Artist extends Model
                 }
 
                 // MusicBrainz presence is a moderate signal
-                if (! empty($this->musicbrainz_id)) {
+                if (! empty($this->musicbrainz_artist_mbid)) {
                     $score += 3;
                 }
 
@@ -124,7 +148,7 @@ class Artist extends Model
             'album_count',
             'link_count',
             'spotify_artist_id',
-            'musicbrainz_id',
+            'musicbrainz_artist_mbid',
         ]);
     }
 

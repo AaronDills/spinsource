@@ -5,6 +5,29 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * Track entity with MusicBrainz identifiers and provenance tracking.
+ *
+ * ## External ID Mapping
+ *
+ * | Column                  | Source       | Description                           |
+ * |-------------------------|--------------|---------------------------------------|
+ * | musicbrainz_recording_id| MusicBrainz  | Recording MBID (the performance)      |
+ * | musicbrainz_release_id  | MusicBrainz  | Release MBID this track came from     |
+ *
+ * ## MusicBrainz Track vs Recording
+ *
+ * - Recording: A unique performance (same across all releases)
+ * - Track: Position on a specific release (may vary by edition)
+ * - We store both to enable cross-referencing
+ *
+ * ## Provenance
+ *
+ * - `source`: Data source ('musicbrainz')
+ * - `source_last_synced_at`: Timestamp of last sync from source
+ *
+ * @see \App\Jobs\MusicBrainzFetchTracklist - Populates tracks from MusicBrainz
+ */
 class Track extends Model
 {
     protected $fillable = [
@@ -16,12 +39,15 @@ class Track extends Model
         'number',
         'disc_number',
         'length_ms',
+        'source',
+        'source_last_synced_at',
     ];
 
     protected $casts = [
         'position' => 'integer',
         'disc_number' => 'integer',
         'length_ms' => 'integer',
+        'source_last_synced_at' => 'datetime',
     ];
 
     public function album(): BelongsTo

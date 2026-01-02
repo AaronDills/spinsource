@@ -27,7 +27,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     {
         $album = Album::find($this->albumId);
 
-        if (! $album || ! $album->musicbrainz_release_group_id) {
+        if (! $album || ! $album->musicbrainz_release_group_mbid) {
             Log::warning('MusicBrainz tracklist: Album not found or no release group ID', [
                 'albumId' => $this->albumId,
             ]);
@@ -36,7 +36,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
         }
 
         // Step 1: Fetch releases for this release group
-        $releases = $this->fetchReleases($album->musicbrainz_release_group_id);
+        $releases = $this->fetchReleases($album->musicbrainz_release_group_mbid);
 
         if ($releases === null) {
             // Rate limited, job was released
@@ -46,7 +46,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
         if (empty($releases)) {
             Log::info('MusicBrainz: No releases found for release group', [
                 'albumId' => $this->albumId,
-                'releaseGroupId' => $album->musicbrainz_release_group_id,
+                'releaseGroupId' => $album->musicbrainz_release_group_mbid,
             ]);
 
             return;
@@ -191,6 +191,9 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
      * Uses atomic transaction to prevent partial deletes if insert fails.
      * Position is computed as a stable numeric value even for vinyl-style
      * track numbers like "A1". Raw number is preserved separately.
+     *
+     * Also updates the album's selected_release_mbid to track which release
+     * was used for tracklist import.
      */
     private function upsertTracks(Album $album, string $releaseId, array $media): void
     {
@@ -222,6 +225,8 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                     'number' => $rawNumber,
                     'disc_number' => $discNumber,
                     'length_ms' => $track['length'] ?? $recording['length'] ?? null,
+                    'source' => 'musicbrainz',
+                    'source_last_synced_at' => $now,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
@@ -239,11 +244,19 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
         // Atomic: either all tracks are replaced or none are.
         // Upsert keyed on (album_id, disc_number, position) updates existing rows.
-        DB::transaction(function () use ($album, $tracks) {
+        // Also stores which release was selected for tracklist import.
+        DB::transaction(function () use ($album, $tracks, $releaseId) {
+            // Store the selected release MBID on the album
+            $album->update([
+                'selected_release_mbid' => $releaseId,
+                // If no canonical release MBID set yet, use this one
+                'musicbrainz_release_mbid' => $album->musicbrainz_release_mbid ?? $releaseId,
+            ]);
+
             Track::upsert(
                 $tracks,
                 ['album_id', 'disc_number', 'position'],
-                ['musicbrainz_recording_id', 'musicbrainz_release_id', 'title', 'number', 'length_ms', 'updated_at']
+                ['musicbrainz_recording_id', 'musicbrainz_release_id', 'title', 'number', 'length_ms', 'source', 'source_last_synced_at', 'updated_at']
             );
 
             // Remove stale tracks not in the new set

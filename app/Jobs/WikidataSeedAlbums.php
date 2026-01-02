@@ -35,14 +35,14 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
 
         // Cursor-based paging over local artists table (avoids DB OFFSET)
         $q = Artist::query()
-            ->whereNotNull('wikidata_id')
+            ->whereNotNull('wikidata_qid')
             ->orderBy('id');
 
         if ($this->afterArtistId) {
             $q->where('id', '>', $this->afterArtistId);
         }
 
-        $artists = $q->limit($artistBatchSize)->get(['id', 'wikidata_id']);
+        $artists = $q->limit($artistBatchSize)->get(['id', 'wikidata_qid']);
 
         if ($artists->isEmpty()) {
             Log::info('Wikidata album seeding completed (no more artists)', [
@@ -63,7 +63,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
         ]);
 
         // Build artist QID -> local ID map for linking albums
-        $artistQidToId = $artists->pluck('id', 'wikidata_id')->toArray();
+        $artistQidToId = $artists->pluck('id', 'wikidata_qid')->toArray();
         $artistQids = array_keys($artistQidToId);
 
         // VALUES list for WDQS
@@ -139,12 +139,12 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
             }
 
             $byAlbum[$albumQid] ??= [
-                'wikidata_id' => $albumQid,
+                'wikidata_qid' => $albumQid,
                 'title' => null,
                 'artist_id' => $artistQidToId[$artistQid],
                 'album_type_qid' => null,
                 'publication_date' => null,
-                'musicbrainz_release_group_id' => null,
+                'musicbrainz_release_group_mbid' => null,
                 'spotify_album_id' => null,
                 'apple_music_album_id' => null,
                 'description' => null,
@@ -159,7 +159,7 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
             $byAlbum[$albumQid]['description'] = $byAlbum[$albumQid]['description'] ?? data_get($row, 'albumDescription.value');
             $byAlbum[$albumQid]['album_type_qid'] = $byAlbum[$albumQid]['album_type_qid'] ?? $this->qidFromEntityUrl(data_get($row, 'albumType.value'));
             $byAlbum[$albumQid]['publication_date'] = $byAlbum[$albumQid]['publication_date'] ?? data_get($row, 'publicationDate.value');
-            $byAlbum[$albumQid]['musicbrainz_release_group_id'] = $byAlbum[$albumQid]['musicbrainz_release_group_id'] ?? data_get($row, 'musicBrainzReleaseGroupId.value');
+            $byAlbum[$albumQid]['musicbrainz_release_group_mbid'] = $byAlbum[$albumQid]['musicbrainz_release_group_mbid'] ?? data_get($row, 'musicBrainzReleaseGroupId.value');
             $byAlbum[$albumQid]['spotify_album_id'] = $byAlbum[$albumQid]['spotify_album_id'] ?? data_get($row, 'spotifyAlbumId.value');
             $byAlbum[$albumQid]['apple_music_album_id'] = $byAlbum[$albumQid]['apple_music_album_id'] ?? data_get($row, 'appleMusicAlbumId.value');
             $byAlbum[$albumQid]['cover_image'] = $byAlbum[$albumQid]['cover_image'] ?? $this->commonsFilename(data_get($row, 'coverImage.value'));
@@ -180,17 +180,19 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
             $releaseYear = $releaseDate ? (int) $releaseDate->year : $this->extractYear($data['publication_date']);
 
             $rows[] = [
-                'wikidata_id' => $data['wikidata_id'],
+                'wikidata_qid' => $data['wikidata_qid'],
                 'title' => $data['title'],
                 'artist_id' => $data['artist_id'],
                 'album_type' => $this->mapAlbumType($data['album_type_qid']),
                 'release_year' => $releaseYear,
                 'release_date' => $releaseDate,
                 'description' => $data['description'],
-                'musicbrainz_release_group_id' => $data['musicbrainz_release_group_id'],
+                'musicbrainz_release_group_mbid' => $data['musicbrainz_release_group_mbid'],
                 'spotify_album_id' => $data['spotify_album_id'],
                 'apple_music_album_id' => $data['apple_music_album_id'],
                 'cover_image_commons' => $data['cover_image'],
+                'source' => 'wikidata',
+                'source_last_synced_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -206,10 +208,10 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
             return;
         }
 
-        // Bulk upsert by wikidata_id (assumes wikidata_id is unique in albums table)
+        // Bulk upsert by wikidata_qid (assumes wikidata_qid is unique in albums table)
         Album::upsert(
             $rows,
-            ['wikidata_id'],
+            ['wikidata_qid'],
             [
                 'title',
                 'artist_id',
@@ -217,10 +219,12 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
                 'release_year',
                 'release_date',
                 'description',
-                'musicbrainz_release_group_id',
+                'musicbrainz_release_group_mbid',
                 'spotify_album_id',
                 'apple_music_album_id',
                 'cover_image_commons',
+                'source',
+                'source_last_synced_at',
                 'updated_at',
             ]
         );

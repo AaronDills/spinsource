@@ -8,18 +8,41 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Scout\Searchable;
 
+/**
+ * Genre entity with canonical external IDs and provenance tracking.
+ *
+ * ## External ID Mapping
+ *
+ * | Column         | Source       | Format           | Example                   |
+ * |----------------|--------------|-----------------|---------------------------|
+ * | wikidata_qid   | Wikidata     | Q-ID (string)   | Q11399 (Rock music)       |
+ * | musicbrainz_id | MusicBrainz  | Tag name/ID     | rock                      |
+ *
+ * ## Provenance
+ *
+ * - `source`: Primary data source ('wikidata')
+ * - `source_last_synced_at`: Timestamp of last sync from source
+ *
+ * @see \App\Jobs\WikidataSeedGenres - Populates from Wikidata
+ */
 class Genre extends Model
 {
     use Searchable;
 
     protected $fillable = [
         'name',
-        'wikidata_id',
+        'wikidata_qid',
         'musicbrainz_id',
         'description',
         'inception_year',
         'country_id',
         'parent_genre_id',
+        'source',
+        'source_last_synced_at',
+    ];
+
+    protected $casts = [
+        'source_last_synced_at' => 'datetime',
     ];
 
     public function country(): BelongsTo

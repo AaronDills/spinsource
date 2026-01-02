@@ -268,11 +268,11 @@ class WikidataEnrichArtists extends WikidataJob
             $artistLinkData = $linkData[$qid] ?? [];
 
             $artistRows[] = [
-                'wikidata_id' => $qid,
+                'wikidata_qid' => $qid,
                 'name' => $name,
                 'sort_name' => $sortName,
                 'artist_type' => $artistType,
-                'musicbrainz_id' => $basic['musicBrainzId'] ?? null,
+                'musicbrainz_artist_mbid' => $basic['musicBrainzId'] ?? null,
                 'spotify_artist_id' => $artistLinkData['spotifyArtistId'] ?? null,
                 'apple_music_artist_id' => $artistLinkData['appleMusicArtistId'] ?? null,
                 'discogs_artist_id' => $artistLinkData['discogsArtistId'] ?? null,
@@ -284,6 +284,8 @@ class WikidataEnrichArtists extends WikidataJob
                 'formed_year' => $formedYear,
                 'disbanded_year' => $disbandedYear,
                 '__country_qid' => $countryQid,
+                'source' => 'wikidata',
+                'source_last_synced_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -342,12 +344,12 @@ class WikidataEnrichArtists extends WikidataJob
         // Upsert Artists in bulk
         Artist::upsert(
             $artistRows,
-            ['wikidata_id'],
+            ['wikidata_qid'],
             [
                 'name',
                 'sort_name',
                 'artist_type',
-                'musicbrainz_id',
+                'musicbrainz_artist_mbid',
                 'spotify_artist_id',
                 'apple_music_artist_id',
                 'discogs_artist_id',
@@ -359,20 +361,22 @@ class WikidataEnrichArtists extends WikidataJob
                 'formed_year',
                 'disbanded_year',
                 'country_id',
+                'source',
+                'source_last_synced_at',
                 'updated_at',
             ]
         );
 
         // Load artist IDs for pivot/link inserts
         $artistsByQid = Artist::query()
-            ->whereIn('wikidata_id', array_keys($artistMeta))
-            ->get(['id', 'wikidata_id'])
-            ->keyBy('wikidata_id');
+            ->whereIn('wikidata_qid', array_keys($artistMeta))
+            ->get(['id', 'wikidata_qid'])
+            ->keyBy('wikidata_qid');
 
         // Map genres
         $allGenreQids = array_values(array_unique($allGenreQids));
         $genresByQid = ! empty($allGenreQids)
-            ? Genre::query()->whereIn('wikidata_id', $allGenreQids)->get(['id', 'wikidata_id'])->keyBy('wikidata_id')
+            ? Genre::query()->whereIn('wikidata_qid', $allGenreQids)->get(['id', 'wikidata_qid'])->keyBy('wikidata_qid')
             : collect();
 
         // Build bulk pivot/link rows

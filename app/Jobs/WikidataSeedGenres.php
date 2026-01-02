@@ -104,9 +104,11 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
                 'musicbrainz_id' => $mbid ?: null,
                 'inception_year' => $inception,
                 'country_id' => $countryId,
+                'source' => 'wikidata',
+                'source_last_synced_at' => now(),
             ];
 
-            Genre::updateOrCreate(['wikidata_id' => $genreQid], array_filter(
+            Genre::updateOrCreate(['wikidata_qid' => $genreQid], array_filter(
                 $payload,
                 static fn ($v) => $v !== null
             ));
@@ -150,9 +152,9 @@ class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
         $parentQids = array_values($pendingParents);
 
         $genres = Genre::query()
-            ->whereIn('wikidata_id', array_merge($childQids, $parentQids))
+            ->whereIn('wikidata_qid', array_merge($childQids, $parentQids))
             ->get()
-            ->keyBy('wikidata_id');
+            ->keyBy('wikidata_qid');
 
         foreach ($pendingParents as $childQid => $parentQid) {
             $child = $genres->get($childQid);
