@@ -20,13 +20,7 @@ services:
       - CACHE_STORE=redis
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - QUEUE_CONNECTION=redis
       - SESSION_DRIVER=redis
-      - SCOUT_DRIVER=typesense
-      - TYPESENSE_HOST=typesense
-      - TYPESENSE_PORT=8108
-      - TYPESENSE_PROTOCOL=http
-      - TYPESENSE_API_KEY=${TYPESENSE_API_KEY:-xyz}
     depends_on:
       db:
         condition: service_healthy
