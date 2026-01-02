@@ -14,6 +14,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
     public function __construct(
         public int $albumId,
+        public bool $forceReselect = false,
     ) {
         parent::__construct();
     }
@@ -35,28 +36,42 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
             return;
         }
 
-        // Step 1: Fetch releases for this release group
-        $releases = $this->fetchReleases($album->musicbrainz_release_group_mbid);
+        // Check if we should use an existing selected release
+        $useExistingRelease = ! $this->forceReselect && $album->selected_release_mbid;
 
-        if ($releases === null) {
-            // Rate limited, job was released
-            return;
-        }
+        if ($useExistingRelease) {
+            // Use previously selected release for stability
+            $releaseId = $album->selected_release_mbid;
 
-        if (empty($releases)) {
-            Log::info('MusicBrainz: No releases found for release group', [
+            Log::debug('MusicBrainz: Using existing selected release', [
                 'albumId' => $this->albumId,
-                'releaseGroupId' => $album->musicbrainz_release_group_mbid,
+                'releaseId' => $releaseId,
             ]);
+        } else {
+            // Step 1: Fetch releases for this release group
+            $releases = $this->fetchReleases($album->musicbrainz_release_group_mbid);
 
-            return;
+            if ($releases === null) {
+                // Rate limited, job was released
+                return;
+            }
+
+            if (empty($releases)) {
+                Log::info('MusicBrainz: No releases found for release group', [
+                    'albumId' => $this->albumId,
+                    'releaseGroupId' => $album->musicbrainz_release_group_mbid,
+                ]);
+
+                return;
+            }
+
+            // Step 2: Pick the best release
+            $bestRelease = $this->pickBestRelease($releases);
+            $releaseId = $bestRelease['id'];
         }
 
-        // Step 2: Pick the best release
-        $bestRelease = $this->pickBestRelease($releases);
-
-        // Step 3: Fetch full tracklist for the best release
-        $media = $this->fetchTracklist($bestRelease['id']);
+        // Step 3: Fetch full tracklist for the selected release
+        $media = $this->fetchTracklist($releaseId);
 
         if ($media === null) {
             // Rate limited, job was released
@@ -66,14 +81,14 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
         if (empty($media)) {
             Log::warning('MusicBrainz: No media/tracks found in release', [
                 'albumId' => $this->albumId,
-                'releaseId' => $bestRelease['id'],
+                'releaseId' => $releaseId,
             ]);
 
             return;
         }
 
         // Step 4: Upsert tracks
-        $this->upsertTracks($album, $bestRelease['id'], $media);
+        $this->upsertTracks($album, $releaseId, $media);
     }
 
     /**
@@ -117,6 +132,23 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     }
 
     /**
+     * Keywords indicating non-standard editions (case-insensitive).
+     */
+    private const EDITION_PENALTY_KEYWORDS = [
+        'deluxe',
+        'expanded',
+        'remastered',
+        'remaster',
+        'anniversary',
+        'bonus',
+        'edition',
+        'special',
+        'collector',
+        'limited',
+        'super',
+    ];
+
+    /**
      * Pick the best release from a list using a scoring algorithm.
      *
      * Criteria (in order of importance):
@@ -126,6 +158,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
      * - Track count (capped at +20)
      * - Release age - older is better (capped at +30)
      * - Has barcode (+10)
+     * - Penalty for edition keywords (-25 per keyword)
      */
     private function pickBestRelease(array $releases): array
     {
@@ -168,6 +201,9 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
             if (! empty($release['barcode'])) {
                 $score += 10;
             }
+
+            // Penalize special editions (deluxe, remastered, anniversary, etc.)
+            $score -= $this->countEditionKeywords($release) * 25;
 
             return ['release' => $release, 'score' => $score];
         }, $releases);
@@ -301,5 +337,28 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
         // Fallback: use sequential counter per medium
         // This handles vinyl tracks ("A1", "B2") and missing data gracefully
         return $fallback;
+    }
+
+    /**
+     * Count edition keywords in release title and disambiguation.
+     *
+     * Checks title and disambiguation fields for keywords that indicate
+     * special editions (deluxe, remastered, etc.) which are less desirable
+     * than standard releases for tracklist stability.
+     */
+    private function countEditionKeywords(array $release): int
+    {
+        $searchText = strtolower(
+            ($release['title'] ?? '').' '.($release['disambiguation'] ?? '')
+        );
+
+        $count = 0;
+        foreach (self::EDITION_PENALTY_KEYWORDS as $keyword) {
+            if (str_contains($searchText, $keyword)) {
+                $count++;
+            }
+        }
+
+        return $count;
     }
 }

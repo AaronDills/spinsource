@@ -14,8 +14,6 @@ services:
       - "5173:5173"
     volumes:
       - .:/var/www/html
-      - /var/www/html/vendor
-      - /var/www/html/node_modules
     environment:
       - APP_ENV=local
       - APP_DEBUG=true
@@ -133,3 +131,5 @@ volumes:
   db-data:
   redis-data:
   typesense-data:
+  app-vendor:
+  app-node-modules:
