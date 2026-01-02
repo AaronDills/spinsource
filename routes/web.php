@@ -6,6 +6,9 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 
+// Diagnostic route - bypasses views entirely
+Route::get('/ping', fn () => response('pong', 200, ['Content-Type' => 'text/plain']));
+
 Route::get('/', function () {
     return view('welcome');
 });
