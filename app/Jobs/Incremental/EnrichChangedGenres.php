@@ -6,21 +6,14 @@ use App\Jobs\WikidataJob;
 use App\Models\Country;
 use App\Models\DataSourceQuery;
 use App\Models\Genre;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
-/**
- * Enrich a batch of changed genre QIDs.
- * Re-fetches full genre data from Wikidata and upserts.
- *
- * ## How it works
- *
- * Takes an array of genre Q-IDs, fetches their current data from Wikidata,
- * and updates the local database. Also resolves parent genre relationships.
- */
 class EnrichChangedGenres extends WikidataJob
 {
-    public function __construct(
-        public array $genreQids = [],
-    ) {
+    /** @param array<int,string> $genreQids */
+    public function __construct(public array $genreQids = [])
+    {
         parent::__construct();
     }
 
@@ -30,115 +23,86 @@ class EnrichChangedGenres extends WikidataJob
             return;
         }
 
-        $this->startJobRun();
-
-        $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $this->genreQids));
-
-        $sparql = DataSourceQuery::get('incremental/genre_enrich', 'wikidata', [
-            'values' => $values,
+        $this->logStart('Enrich changed genres', [
+            'count' => count($this->genreQids),
         ]);
 
-        $response = $this->executeWdqsRequest($sparql);
-        $this->incrementApiCalls();
+        $sparql = $this->sparqlLoader->load('genres/enrich_genres');
 
-        if ($response === null) {
-            $this->failJobRun('Rate limited - job released for retry');
+        $response = $this->wikidata->querySparql($sparql, [
+            'genreQids' => $this->genreQids,
+        ]);
 
+        DataSourceQuery::create([
+            'source' => 'wikidata',
+            'query_type' => 'sparql',
+            'query_name' => 'genres/enrich_genres',
+            'query' => $sparql,
+            'response_meta' => [
+                'qids' => $this->genreQids,
+            ],
+        ]);
+
+        $results = $response['results']['bindings'] ?? [];
+        if (empty($results)) {
+            $this->logEnd('Enrich changed genres (no results)', [
+                'count' => count($this->genreQids),
+            ]);
             return;
         }
 
-        $bindings = $response->json('results.bindings', []);
+        $countriesToUpsert = [];
+        $genreUpdates = [];
 
-        if (empty($bindings)) {
-            $this->incrementSkipped(count($this->genreQids));
-            $this->finishJobRun();
-
-            return;
-        }
-
-        $pendingParents = [];
-        $upserted = 0;
-
-        foreach ($bindings as $row) {
-            $genreQid = $this->qidFromEntityUrl(data_get($row, 'genre.value'));
-            if (! $genreQid) {
-                $this->incrementSkipped();
-
+        foreach ($results as $row) {
+            $genreQid = $this->wikidata->extractQid($row['genre']['value'] ?? null);
+            if (!$genreQid) {
                 continue;
             }
 
-            $name = data_get($row, 'genreLabel.value');
-            $description = data_get($row, 'genreDescription.value');
-            $mbid = data_get($row, 'musicBrainzId.value');
-            $inception = $this->extractYear(data_get($row, 'inception.value'));
-
-            $countryId = null;
-            $countryQid = $this->qidFromEntityUrl(data_get($row, 'country.value'));
-            $countryName = data_get($row, 'countryLabel.value');
-
-            if ($countryQid && $countryName) {
-                $country = Country::updateOrCreate(
-                    ['wikidata_id' => $countryQid],
-                    ['name' => $countryName]
-                );
-                $countryId = $country->id;
+            $countryQid = $this->wikidata->extractQid($row['country']['value'] ?? null);
+            if ($countryQid) {
+                $countriesToUpsert[$countryQid] = [
+                    'wikidata_qid' => $countryQid,
+                    'name' => $row['countryLabel']['value'] ?? $countryQid,
+                ];
             }
 
-            $parentQid = $this->qidFromEntityUrl(data_get($row, 'parentGenre.value'));
-            if ($parentQid) {
-                $pendingParents[$genreQid] = $parentQid;
-            }
-
-            $payload = [
-                'name' => $name ?: null,
-                'description' => $description ?: null,
-                'musicbrainz_id' => $mbid ?: null,
-                'inception_year' => $inception,
-                'country_id' => $countryId,
-                'source' => 'wikidata',
-                'source_last_synced_at' => now(),
+            $genreUpdates[$genreQid] = [
+                'name' => $row['genreLabel']['value'] ?? null,
+                'country_qid' => $countryQid,
             ];
-
-            Genre::updateOrCreate(['wikidata_qid' => $genreQid], array_filter(
-                $payload,
-                static fn ($v) => $v !== null
-            ));
-
-            $upserted++;
         }
 
-        $this->incrementProcessed(count($this->genreQids));
-        $this->incrementUpdated($upserted);
-
-        if (! empty($pendingParents)) {
-            $this->resolveParents($pendingParents);
-        }
-
-        $this->finishJobRun();
-    }
-
-    private function resolveParents(array $pendingParents): void
-    {
-        $childQids = array_keys($pendingParents);
-        $parentQids = array_values($pendingParents);
-
-        $genres = Genre::query()
-            ->whereIn('wikidata_qid', array_merge($childQids, $parentQids))
-            ->get()
-            ->keyBy('wikidata_qid');
-
-        foreach ($pendingParents as $childQid => $parentQid) {
-            $child = $genres->get($childQid);
-            $parent = $genres->get($parentQid);
-
-            if (! $child || ! $parent) {
-                continue;
+        DB::transaction(function () use ($countriesToUpsert, $genreUpdates) {
+            if (!empty($countriesToUpsert)) {
+                Country::upsert(array_values($countriesToUpsert), ['wikidata_qid'], ['name']);
             }
 
-            if ($child->parent_genre_id !== $parent->id) {
-                $child->parent_genre_id = $parent->id;
-                $child->save();
+            $countryIdByQid = collect();
+            if (!empty($countriesToUpsert)) {
+                $countryIdByQid = Country::whereIn('wikidata_qid', array_keys($countriesToUpsert))
+                    ->get(['id', 'wikidata_qid'])
+                    ->keyBy('wikidata_qid')
+                    ->map(fn ($c) => $c->id);
             }
-        }
+
+            foreach ($genreUpdates as $qid => $data) {
+                $countryId = $data['country_qid'] ? ($countryIdByQid[$data['country_qid']] ?? null) : null;
+
+                Genre::where('wikidata_qid', $qid)->update([
+                    'name' => $data['name'],
+                    'country_id' => $countryId,
+                ]);
+            }
+        });
+
+        Log::info('Enriched changed genres', [
+            'count' => count($genreUpdates),
+        ]);
+
+        $this->logEnd('Enrich changed genres', [
+            'count' => count($genreUpdates),
+        ]);
     }
 }

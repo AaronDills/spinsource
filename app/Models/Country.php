@@ -9,7 +9,7 @@ class Country extends Model
 {
     protected $fillable = [
         'name',
-        'wikidata_id',
+        'wikidata_qid',
         'iso_code',
     ];
 

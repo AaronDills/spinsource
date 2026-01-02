@@ -20,110 +20,84 @@ class WikidataRecomputeSortNames extends WikidataJob
 
     public function handle(): void
     {
-        $artistQids = array_values(array_unique(array_filter(
-            $this->artistQids,
-            fn ($q) => is_string($q) && preg_match('/^Q\d+$/', $q)
-        )));
-
-        if (count($artistQids) === 0) {
+        if (empty($this->artistQids)) {
             return;
         }
 
-        Log::info('Wikidata recompute sort_name batch start', [
-            'count' => count($artistQids),
+        $this->logStart('Recompute artist sort names', [
+            'count' => count($this->artistQids),
         ]);
 
-        $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $artistQids));
+        $sparql = $this->sparqlLoader->load('artists/name_components_for_sort');
 
-        $sparql = DataSourceQuery::get('artist_name_components', 'wikidata', ['values' => $values]);
-        $response = $this->executeWdqsRequest($sparql);
+        $response = $this->wikidata->querySparql($sparql, [
+            'artistQids' => $this->artistQids,
+        ]);
 
-        if ($response === null) {
-            return; // Rate limited, job released
-        }
+        DataSourceQuery::create([
+            'source' => 'wikidata',
+            'query_type' => 'sparql',
+            'query_name' => 'artists/name_components_for_sort',
+            'query' => $sparql,
+            'response_meta' => [
+                'qids' => $this->artistQids,
+            ],
+        ]);
 
-        $bindings = $response->json('results.bindings', []);
+        $results = $response['results']['bindings'] ?? [];
 
-        // Build QID -> name components map
         $nameComponents = [];
-        foreach ($bindings as $row) {
-            $qid = $this->qidFromEntityUrl(data_get($row, 'artist.value'));
-            if (! $qid) {
+        foreach ($results as $row) {
+            $artist = $row['artist'] ?? null;
+            if (!$artist) {
                 continue;
             }
 
-            // Only take first result per artist
-            if (isset($nameComponents[$qid])) {
+            $qid = $this->wikidata->extractQid($artist['value'] ?? null);
+            if (!$qid) {
                 continue;
             }
+
+            $given = $row['givenNameLabel']['value'] ?? null;
+            $family = $row['familyNameLabel']['value'] ?? null;
 
             $nameComponents[$qid] = [
-                'givenName' => data_get($row, 'givenNameLabel.value'),
-                'familyName' => data_get($row, 'familyNameLabel.value'),
+                'given' => $given,
+                'family' => $family,
             ];
         }
 
-        // Load artists from database
-        $artists = Artist::whereIn('wikidata_id', $artistQids)
-            ->get(['id', 'wikidata_id', 'name', 'sort_name']);
+        $artists = Artist::whereIn('wikidata_qid', $this->artistQids)
+            ->get(['id', 'wikidata_qid', 'name', 'sort_name']);
 
         $updated = 0;
+
         foreach ($artists as $artist) {
-            $components = $nameComponents[$artist->wikidata_id] ?? [];
+            $components = $nameComponents[$artist->wikidata_qid] ?? [];
+            $given = $components['given'] ?? null;
+            $family = $components['family'] ?? null;
 
-            $newSortName = $this->computeSortName(
-                $artist->name,
-                $components['givenName'] ?? null,
-                $components['familyName'] ?? null
-            );
+            $newSort = $artist->sort_name;
 
-            if ($newSortName && $newSortName !== $artist->sort_name) {
-                $artist->sort_name = $newSortName;
+            if ($family) {
+                $newSort = $given ? "{$family}, {$given}" : $family;
+            }
+
+            if ($newSort !== $artist->sort_name && $newSort !== null) {
+                $artist->sort_name = $newSort;
                 $artist->save();
                 $updated++;
             }
         }
 
-        Log::info('Wikidata recompute sort_name batch done', [
-            'requested' => count($artistQids),
+        Log::info('Recomputed artist sort names', [
+            'artists' => $artists->count(),
             'updated' => $updated,
         ]);
-    }
 
-    /**
-     * Compute a sortable name from display name and name components.
-     * For persons with family name: "Family, Given"
-     * For groups/bands: strip "The " prefix and lowercase
-     */
-    private function computeSortName(?string $displayName, ?string $givenName, ?string $familyName): ?string
-    {
-        $displayName = $displayName ? trim($displayName) : null;
-        if (! $displayName) {
-            return null;
-        }
-
-        $givenName = $givenName ? trim($givenName) : null;
-        $familyName = $familyName ? trim($familyName) : null;
-
-        // Skip Q-ID labels that leaked through
-        if ($givenName && preg_match('/^Q\d+$/', $givenName)) {
-            $givenName = null;
-        }
-        if ($familyName && preg_match('/^Q\d+$/', $familyName)) {
-            $familyName = null;
-        }
-
-        // If we have family name, format as "Family, Given"
-        if ($familyName) {
-            return $givenName ? "{$familyName}, {$givenName}" : $familyName;
-        }
-
-        // For groups/unknowns: strip "The " prefix and lowercase for sorting
-        $sortName = mb_strtolower($displayName);
-        if (str_starts_with($sortName, 'the ')) {
-            $sortName = trim(substr($sortName, 4));
-        }
-
-        return $sortName;
+        $this->logEnd('Recompute artist sort names', [
+            'artists' => $artists->count(),
+            'updated' => $updated,
+        ]);
     }
 }

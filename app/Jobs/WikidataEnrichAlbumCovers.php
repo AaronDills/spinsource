@@ -7,109 +7,91 @@ use App\Models\DataSourceQuery;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Enriches albums with cover images from Wikidata.
+ * Enrich albums with cover images from Wikidata.
  *
- * Takes a batch of album Wikidata QIDs, queries P18 (image) for each,
- * and updates the cover_image_commons field.
- *
- * Used for backfilling existing albums that were imported before
- * cover image support was added.
+ * Takes a batch of album QIDs, queries Wikidata for cover images,
+ * and updates all matching albums with cover_image_commons.
  */
 class WikidataEnrichAlbumCovers extends WikidataJob
 {
-    public function __construct(
-        public array $qids = [],
-    ) {
+    /** @param array<int,string> $albumQids */
+    public function __construct(public array $albumQids = [])
+    {
         parent::__construct();
     }
 
     public function handle(): void
     {
-        if (empty($this->qids)) {
-            Log::info('WikidataEnrichAlbumCovers: No QIDs provided');
-
+        if (empty($this->albumQids)) {
             return;
         }
 
-        $qids = array_unique($this->qids);
-
-        Log::info('WikidataEnrichAlbumCovers: Starting batch', [
-            'count' => count($qids),
+        $this->logStart('Enrich album covers', [
+            'count' => count($this->albumQids),
         ]);
 
-        // Build VALUES clause for SPARQL
-        $values = implode(' ', array_map(fn ($qid) => "wd:$qid", $qids));
+        $sparql = $this->sparqlLoader->load('albums/enrich_album_covers');
 
-        $sparql = DataSourceQuery::get('album_covers', 'wikidata', [
-            'values' => $values,
+        $response = $this->wikidata->querySparql($sparql, [
+            'albumQids' => $this->albumQids,
         ]);
 
-        $response = $this->executeWdqsRequest($sparql);
+        DataSourceQuery::create([
+            'source' => 'wikidata',
+            'query_type' => 'sparql',
+            'query_name' => 'albums/enrich_album_covers',
+            'query' => $sparql,
+            'response_meta' => [
+                'qids' => $this->albumQids,
+            ],
+        ]);
 
-        // If null, job was released due to rate limiting
-        if ($response === null) {
-            return;
-        }
-
-        $bindings = $response->json('results.bindings', []);
-
-        // Process results
-        $updates = [];
-        foreach ($bindings as $row) {
-            $qid = $this->qidFromEntityUrl(data_get($row, 'album.value'));
-            $coverImage = $this->commonsFilename(data_get($row, 'coverImage.value'));
-
-            if ($qid && $coverImage) {
-                $updates[$qid] = $coverImage;
-            }
-        }
-
-        if (empty($updates)) {
-            Log::info('WikidataEnrichAlbumCovers: No cover images found', [
-                'queriedCount' => count($qids),
+        $results = $response['results']['bindings'] ?? [];
+        if (empty($results)) {
+            $this->logEnd('Enrich album covers (no results)', [
+                'count' => count($this->albumQids),
             ]);
-
             return;
         }
 
-        // Update albums in batches
-        $updated = 0;
-        foreach ($updates as $qid => $coverImage) {
-            $affected = Album::where('wikidata_id', $qid)
-                ->whereNull('cover_image_commons')
-                ->update(['cover_image_commons' => $coverImage]);
-            $updated += $affected;
-        }
+        $byQid = [];
+        foreach ($results as $row) {
+            $album = $row['album'] ?? null;
+            $cover = $row['coverImageCommons'] ?? null;
 
-        Log::info('WikidataEnrichAlbumCovers: Batch complete', [
-            'queriedCount' => count($qids),
-            'foundCount' => count($updates),
-            'updatedCount' => $updated,
-        ]);
-    }
-
-    /**
-     * Extract Commons filename from Wikidata image URL.
-     */
-    private function commonsFilename(?string $value): ?string
-    {
-        if (! $value) {
-            return null;
-        }
-
-        $value = trim($value);
-
-        if (str_contains($value, 'Special:FilePath/')) {
-            $value = substr($value, strrpos($value, 'Special:FilePath/') + strlen('Special:FilePath/'));
-        } else {
-            $slash = strrpos($value, '/');
-            if ($slash !== false) {
-                $value = substr($value, $slash + 1);
+            if (!$album || !$cover) {
+                continue;
             }
+
+            $qid = $this->wikidata->extractQid($album['value'] ?? null);
+            $coverValue = $cover['value'] ?? null;
+
+            if (!$qid || !$coverValue) {
+                continue;
+            }
+
+            $byQid[$qid] = $coverValue;
         }
 
-        $value = urldecode($value);
+        $updated = 0;
+        foreach ($byQid as $qid => $coverCommons) {
+            $affected = Album::where('wikidata_qid', $qid)
+                ->whereNull('cover_image_commons')
+                ->update([
+                    'cover_image_commons' => $coverCommons,
+                ]);
 
-        return $value !== '' ? $value : null;
+            $updated += (int) $affected;
+        }
+
+        Log::info('Enriched album covers', [
+            'unique_qids' => count($byQid),
+            'rows_updated' => $updated,
+        ]);
+
+        $this->logEnd('Enrich album covers', [
+            'unique_qids' => count($byQid),
+            'rows_updated' => $updated,
+        ]);
     }
 }

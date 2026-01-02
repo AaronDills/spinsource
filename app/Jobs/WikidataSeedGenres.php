@@ -5,169 +5,87 @@ namespace App\Jobs;
 use App\Models\Country;
 use App\Models\DataSourceQuery;
 use App\Models\Genre;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class WikidataSeedGenres extends WikidataJob implements ShouldBeUnique
+class WikidataSeedGenres extends WikidataJob
 {
-    /**
-     * Cursor pagination using numeric O-ID:
-     * - null = start from beginning
-     * - integer = fetch items with O-ID > afterOid
-     */
-    public function __construct(
-        public ?int $afterOid = null,
-        public int $pageSize = 500,
-        public bool $singlePage = false, // diagnostic mode: no continuation
-    ) {
-        parent::__construct();
-    }
-
-    public function uniqueId(): string
-    {
-        // Prevent accidental duplicate page processing
-        $cursor = $this->afterOid ?? 'START';
-
-        return "wikidata:genres:after:{$cursor}:size:{$this->pageSize}";
-    }
-
     public function handle(): void
     {
-        Log::info('Wikidata genre seed page start', [
-            'afterOid' => $this->afterOid,
-            'pageSize' => $this->pageSize,
+        $this->logStart('Seed genres');
+
+        $sparql = $this->sparqlLoader->load('genres/seed_genres');
+
+        $response = $this->wikidata->querySparql($sparql);
+
+        DataSourceQuery::create([
+            'source' => 'wikidata',
+            'query_type' => 'sparql',
+            'query_name' => 'genres/seed_genres',
+            'query' => $sparql,
         ]);
 
-        $afterFilter = '';
-        if (is_int($this->afterOid) && $this->afterOid > 0) {
-            $afterFilter = "FILTER(?oid > {$this->afterOid})";
-        }
-
-        $sparql = DataSourceQuery::get('genres', 'wikidata', [
-            'limit' => $this->pageSize,
-            'after_filter' => $afterFilter,
-        ]);
-
-        $response = $this->executeWdqsRequest($sparql);
-
-        // If null, job was released due to 429 rate limit
-        if ($response === null) {
+        $results = $response['results']['bindings'] ?? [];
+        if (empty($results)) {
+            $this->logEnd('Seed genres (no results)');
             return;
         }
 
-        $bindings = $response->json('results.bindings', []);
-        $count = count($bindings);
+        $countriesToUpsert = [];
+        $genresToUpsert = [];
 
-        if ($count === 0) {
-            Log::info('Wikidata genre seed completed (no more results)', [
-                'afterOid' => $this->afterOid,
-                'pageSize' => $this->pageSize,
-            ]);
-
-            return;
-        }
-
-        $pendingParents = [];
-
-        foreach ($bindings as $row) {
-            $genreQid = $this->qidFromEntityUrl(data_get($row, 'genre.value'));
-            if (! $genreQid) {
+        foreach ($results as $row) {
+            $genreQid = $this->wikidata->extractQid($row['genre']['value'] ?? null);
+            if (!$genreQid) {
                 continue;
             }
 
-            $name = data_get($row, 'genreLabel.value');
-            $description = data_get($row, 'genreDescription.value');
-            $mbid = data_get($row, 'musicBrainzId.value');
-            $inception = $this->extractYear(data_get($row, 'inception.value'));
+            $countryQid = $this->wikidata->extractQid($row['country']['value'] ?? null);
 
-            $countryId = null;
-            $countryQid = $this->qidFromEntityUrl(data_get($row, 'country.value'));
-            $countryName = data_get($row, 'countryLabel.value');
-
-            if ($countryQid && $countryName) {
-                $country = Country::updateOrCreate(
-                    ['wikidata_id' => $countryQid],
-                    ['name' => $countryName]
-                );
-                $countryId = $country->id;
+            if ($countryQid) {
+                $countriesToUpsert[$countryQid] = [
+                    'wikidata_qid' => $countryQid,
+                    'name' => $row['countryLabel']['value'] ?? $countryQid,
+                ];
             }
 
-            $parentQid = $this->qidFromEntityUrl(data_get($row, 'parentGenre.value'));
-            if ($parentQid) {
-                $pendingParents[$genreQid] = $parentQid;
-            }
-
-            // Keep name nullable handling explicit (optional but clearer than array_filter magic)
-            $payload = [
-                'name' => $name ?: null,
-                'description' => $description ?: null,
-                'musicbrainz_id' => $mbid ?: null,
-                'inception_year' => $inception,
-                'country_id' => $countryId,
-                'source' => 'wikidata',
-                'source_last_synced_at' => now(),
+            $genresToUpsert[] = [
+                'wikidata_qid' => $genreQid,
+                'name' => $row['genreLabel']['value'] ?? $genreQid,
+                'country_qid' => $countryQid,
             ];
-
-            Genre::updateOrCreate(['wikidata_qid' => $genreQid], array_filter(
-                $payload,
-                static fn ($v) => $v !== null
-            ));
         }
 
-        if (! empty($pendingParents)) {
-            $this->resolveParents($pendingParents);
-        }
+        DB::transaction(function () use ($countriesToUpsert, $genresToUpsert) {
+            if (!empty($countriesToUpsert)) {
+                Country::upsert(array_values($countriesToUpsert), ['wikidata_qid'], ['name']);
+            }
 
-        // Compute next cursor from last binding's numeric O-ID
-        $nextAfterOid = (int) data_get($bindings[$count - 1], 'oid.value');
+            // Map country qid to id
+            $countryIdByQid = collect();
+            if (!empty($countriesToUpsert)) {
+                $countryIdByQid = Country::whereIn('wikidata_qid', array_keys($countriesToUpsert))
+                    ->get(['id', 'wikidata_qid'])
+                    ->keyBy('wikidata_qid')
+                    ->map(fn ($c) => $c->id);
+            }
 
-        Log::info('Wikidata genre seed page done', [
-            'afterOid' => $this->afterOid,
-            'pageSize' => $this->pageSize,
-            'count' => $count,
-            'nextAfterOid' => $nextAfterOid,
+            foreach ($genresToUpsert as $g) {
+                $countryId = $g['country_qid'] ? ($countryIdByQid[$g['country_qid']] ?? null) : null;
+
+                Genre::updateOrCreate(
+                    ['wikidata_qid' => $g['wikidata_qid']],
+                    ['name' => $g['name'], 'country_id' => $countryId]
+                );
+            }
+        });
+
+        Log::info('Seeded genres', [
+            'count' => count($genresToUpsert),
         ]);
 
-        // If we got a full page and have a valid cursor, enqueue next page (unless single-page mode)
-        if ($count === $this->pageSize && $nextAfterOid > 0 && ! $this->singlePage) {
-            usleep(250_000);
-
-            self::dispatch($nextAfterOid, $this->pageSize, false);
-
-            Log::info('Enqueued next Wikidata genre seed page', [
-                'nextAfterOid' => $nextAfterOid,
-                'pageSize' => $this->pageSize,
-            ]);
-        } elseif ($this->singlePage) {
-            Log::info('Single-page mode: stopping after first page', [
-                'afterOid' => $this->afterOid,
-                'count' => $count,
-            ]);
-        }
-    }
-
-    private function resolveParents(array $pendingParents): void
-    {
-        $childQids = array_keys($pendingParents);
-        $parentQids = array_values($pendingParents);
-
-        $genres = Genre::query()
-            ->whereIn('wikidata_qid', array_merge($childQids, $parentQids))
-            ->get()
-            ->keyBy('wikidata_qid');
-
-        foreach ($pendingParents as $childQid => $parentQid) {
-            $child = $genres->get($childQid);
-            $parent = $genres->get($parentQid);
-
-            if (! $child || ! $parent) {
-                continue;
-            }
-
-            if ($child->parent_genre_id !== $parent->id) {
-                $child->parent_genre_id = $parent->id;
-                $child->save();
-            }
-        }
+        $this->logEnd('Seed genres', [
+            'count' => count($genresToUpsert),
+        ]);
     }
 }
