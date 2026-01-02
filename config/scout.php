@@ -180,7 +180,7 @@ return [
             'retry_interval_seconds' => env('TYPESENSE_RETRY_INTERVAL_SECONDS', 1),
         ],
         'model-settings' => [
-            \App\Models\Artist::class => [
+            'App\Models\Artist' => [
                 'collection-schema' => [
                     'fields' => [
                         ['name' => 'id', 'type' => 'string'],
@@ -194,7 +194,7 @@ return [
                     'sort_by' => '_text_match:desc,rank_score:desc',
                 ],
             ],
-            \App\Models\Album::class => [
+            'App\Models\Album' => [
                 'collection-schema' => [
                     'fields' => [
                         ['name' => 'id', 'type' => 'string'],
@@ -207,7 +207,7 @@ return [
                     'query_by' => 'title,artist_name',
                 ],
             ],
-            \App\Models\Genre::class => [
+            'App\Models\Genre' => [
                 'collection-schema' => [
                     'fields' => [
                         ['name' => 'id', 'type' => 'string'],
