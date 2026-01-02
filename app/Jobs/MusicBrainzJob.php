@@ -19,6 +19,7 @@ abstract class MusicBrainzJob extends RateLimitedApiJob
 {
     use HandlesMusicBrainzRateLimits;
     use TracksJobMetrics;
+    use \App\Jobs\Concerns\RecordsJobHeartbeat;
 
     /**
      * Get the queue name for MusicBrainz jobs.

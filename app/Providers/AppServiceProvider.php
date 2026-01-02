@@ -29,13 +29,28 @@ class AppServiceProvider extends ServiceProvider
 
     /**
      * Configure authorization gates for admin dashboards.
-     * Uses the same logic as Horizon (is_admin check).
+     * Uses the same admin check (is_admin) for gate access.
      */
     protected function configureAdminGates(): void
     {
         Gate::define('viewPulse', fn ($user = null) => $user?->is_admin === true);
 
         LogViewer::auth(fn ($request) => $request->user()?->is_admin === true);
+        
+        // Admin dashboard gate: allow explicit is_admin OR configured ADMIN_EMAILS
+        Gate::define('viewAdminDashboard', function ($user = null) {
+            if ($user && ($user->is_admin === true)) {
+                return true;
+            }
+
+            $emails = env('ADMIN_EMAILS');
+            if (! $emails) {
+                return false;
+            }
+
+            $allowed = array_map('trim', explode(',', $emails));
+            return $user && in_array($user->email, $allowed, true);
+        });
     }
 
     /**

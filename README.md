@@ -42,7 +42,7 @@ A Laravel application for aggregating and managing music metadata from multiple 
 | `/search-results?q=` | Full search results page |
 | `/artist/{id}` | Artist detail page |
 | `/album/{id}` | Album detail page with tracklist |
-| `/horizon` | Queue monitoring dashboard |
+| `/admin/monitoring` | Admin monitoring dashboard (admin only) |
 
 ### Data Sources
 
@@ -59,7 +59,7 @@ A Laravel application for aggregating and managing music metadata from multiple 
 
 ### Queue Architecture
 
-Horizon manages multiple supervisor groups with rate-limited processing:
+Supervisor-managed queue workers with rate-limited processing:
 
 | Supervisor | Queue | Workers | Purpose |
 |------------|-------|---------|---------|
@@ -132,7 +132,8 @@ php artisan key:generate
 php artisan migrate
 
 # Start queue workers
-php artisan horizon
+php artisan queue:work --sleep=3 --tries=3 --timeout=90
+# For production, run queue workers under Supervisor or a process manager
 ```
 
 ## Configuration
@@ -186,7 +187,7 @@ php artisan wikidata:dispatch-seed-albums
 php artisan wikidata:dispatch-enrich-album-covers
 ```
 
-Monitor progress via Horizon dashboard at `/horizon`.
+Monitor progress via the Admin Monitoring Dashboard.
 
 ## Scheduling
 
@@ -294,7 +295,7 @@ class MyMusicBrainzJob extends MusicBrainzJob
 - **Database**: MySQL 8.0
 - **Cache/Queue**: Redis 7
 - **Search**: Typesense 27
-- **Queue Management**: Laravel Horizon
+- **Queue Management**: Supervisor + `queue:work`
 - **Frontend**: Blade + Alpine.js + Tailwind CSS
 - **Build Tool**: Vite
 

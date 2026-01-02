@@ -12,6 +12,15 @@ Route::get('/ping', fn () => response('pong', 200, ['Content-Type' => 'text/plai
 Route::get('/', function () {
     return view('welcome');
 });
+    
+// Admin monitoring routes
+Route::middleware(['auth'])->group(function () {
+    Route::get('/admin/monitoring', [\App\Http\Controllers\AdminMonitoringController::class, 'index'])
+        ->name('admin.monitoring');
+
+    Route::get('/admin/monitoring/data', [\App\Http\Controllers\AdminMonitoringController::class, 'data'])
+        ->name('admin.monitoring.data');
+});
 
 Route::get('/search', [SearchController::class, 'search'])->name('search');
 Route::get('/search-results', [SearchController::class, 'results'])->name('search.results');

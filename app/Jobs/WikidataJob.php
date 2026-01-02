@@ -21,6 +21,7 @@ abstract class WikidataJob extends RateLimitedApiJob
 {
     use HandlesWikidataRateLimits;
     use TracksJobMetrics;
+    use \App\Jobs\Concerns\RecordsJobHeartbeat;
 
     /**
      * Get the queue name for Wikidata jobs.

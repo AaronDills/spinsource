@@ -28,10 +28,15 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     {
         $album = Album::find($this->albumId);
 
+        // Record job start heartbeat
+        $this->recordHeartbeat(static::class, 'start', ['album_id' => $this->albumId]);
+
         if (! $album || ! $album->musicbrainz_release_group_mbid) {
             Log::warning('MusicBrainz tracklist: Album not found or no release group ID', [
                 'albumId' => $this->albumId,
             ]);
+
+            $this->recordHeartbeat(static::class, 'missing_album', ['album_id' => $this->albumId]);
 
             return;
         }
@@ -53,6 +58,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
             if ($releases === null) {
                 // Rate limited, job was released
+                $this->recordHeartbeat(static::class, 'rate_limited_releases', ['album_id' => $this->albumId]);
                 return;
             }
 
@@ -62,12 +68,17 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                     'releaseGroupId' => $album->musicbrainz_release_group_mbid,
                 ]);
 
+                $this->recordHeartbeat(static::class, 'no_releases', ['album_id' => $this->albumId, 'release_group' => $album->musicbrainz_release_group_mbid]);
+
                 return;
             }
 
             // Step 2: Pick the best release
             $bestRelease = $this->pickBestRelease($releases);
             $releaseId = $bestRelease['id'];
+
+            // Heartbeat with release selection info
+            $this->recordHeartbeat(static::class, 'selected_release', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
         }
 
         // Step 3: Fetch full tracklist for the selected release
@@ -75,6 +86,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
         if ($media === null) {
             // Rate limited, job was released
+            $this->recordHeartbeat(static::class, 'rate_limited_tracklist', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
             return;
         }
 
@@ -84,11 +96,16 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                 'releaseId' => $releaseId,
             ]);
 
+            $this->recordHeartbeat(static::class, 'no_media', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
+
             return;
         }
 
         // Step 4: Upsert tracks
         $this->upsertTracks($album, $releaseId, $media);
+
+        // Final heartbeat
+        $this->recordHeartbeat(static::class, 'complete', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
     }
 
     /**
