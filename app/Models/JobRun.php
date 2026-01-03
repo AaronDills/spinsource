@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class JobRun extends Model
 {
+    use HasFactory;
     public const STATUS_RUNNING = 'running';
 
     public const STATUS_SUCCESS = 'success';
@@ -94,7 +96,7 @@ class JobRun extends Model
     /**
      * Increment a counter in totals.
      */
-    public function increment(string $key, int $amount = 1): self
+    public function incrementTotal(string $key, int $amount = 1): self
     {
         $totals = $this->totals ?? [];
         $totals[$key] = ($totals[$key] ?? 0) + $amount;
