@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\JobHeartbeat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Cache;
@@ -13,6 +14,13 @@ use Illuminate\Support\Carbon;
 
 class AdminMonitoringController extends Controller
 {
+    /**
+     * Thresholds for warnings (in minutes or counts)
+     */
+    private const WARNING_QUEUE_DEPTH = 100;
+    private const WARNING_NO_ACTIVITY_MINUTES = 30;
+    private const WARNING_FAILED_JOBS = 10;
+
     public function index(Request $request)
     {
         Gate::authorize('viewAdminDashboard');
@@ -24,16 +32,22 @@ class AdminMonitoringController extends Controller
     {
         Gate::authorize('viewAdminDashboard');
 
-        $now = Carbon::now()->toIso8601String();
+        $now = Carbon::now();
 
         $metrics = [
-            'generated_at' => $now,
+            'generated_at' => $now->toIso8601String(),
+            'generated_at_human' => $now->format('H:i:s'),
             'queues' => $this->gatherQueueMetrics(),
             'tables' => $this->gatherTableCounts(),
             'failed_jobs' => $this->gatherFailedJobs(),
             'ingestion_activity' => $this->gatherIngestionActivity(),
+            'heartbeats' => $this->gatherHeartbeats(),
             'env' => $this->gatherEnvironment(),
+            'warnings' => [],
         ];
+
+        // Generate warnings
+        $metrics['warnings'] = $this->generateWarnings($metrics);
 
         return response()->json($metrics);
     }
@@ -51,7 +65,6 @@ class AdminMonitoringController extends Controller
 
         try {
             $redis = Redis::connection();
-            // try to ping
             $redis->ping();
             $result['redis_available'] = true;
 
@@ -62,16 +75,16 @@ class AdminMonitoringController extends Controller
                     $keys = $redis->keys('queues:*') ?: [];
                 }
             } catch (\Throwable $e) {
-                // Fall back to configured list
                 Log::debug('Redis keys scan failed for queue discovery', ['err' => $e->getMessage()]);
             }
 
             foreach ($keys as $k) {
-                // keys may be bytes; cast to string
                 $name = (string) $k;
                 $parts = explode(':', $name);
                 $q = end($parts);
-                $queues[] = $q;
+                if ($q && !str_contains($q, ':notify') && !str_contains($q, ':reserved')) {
+                    $queues[] = $q;
+                }
             }
 
             $queues = array_values(array_unique($queues));
@@ -84,8 +97,10 @@ class AdminMonitoringController extends Controller
                     $len = null;
                 }
 
+                $depth = is_int($len) ? $len : 0;
                 $result['queues'][$q] = [
-                    'depth' => is_int($len) ? $len : null,
+                    'depth' => $depth,
+                    'warning' => $depth > self::WARNING_QUEUE_DEPTH,
                 ];
             }
 
@@ -98,19 +113,36 @@ class AdminMonitoringController extends Controller
 
     protected function gatherTableCounts(): array
     {
-        $tables = ['artists','albums','tracks','genres','artist_links','countries','data_source_queries','jobs','failed_jobs'];
+        $tables = ['artists', 'albums', 'tracks', 'genres', 'artist_links', 'countries', 'data_source_queries', 'jobs', 'failed_jobs'];
         $out = [];
 
         foreach ($tables as $t) {
-            if (! Schema::hasTable($t)) {
-                $out[$t] = ['exists' => false, 'count' => null];
+            if (!Schema::hasTable($t)) {
+                $out[$t] = ['exists' => false, 'count' => null, 'delta' => null];
                 continue;
             }
 
             $cacheKey = "admin_monitor:count:{$t}";
+            $previousKey = "admin_monitor:prev_count:{$t}";
+
             $count = Cache::remember($cacheKey, 3, fn() => DB::table($t)->count());
 
-            $out[$t] = ['exists' => true, 'count' => (int) $count];
+            // Track delta from previous reading
+            $previous = Cache::get($previousKey);
+            $delta = null;
+            if ($previous !== null) {
+                $delta = $count - $previous;
+            }
+
+            // Store current as previous for next comparison (store for 60 seconds)
+            Cache::put($previousKey, $count, 60);
+
+            $out[$t] = [
+                'exists' => true,
+                'count' => (int) $count,
+                'delta' => $delta,
+                'formatted' => number_format($count),
+            ];
         }
 
         return $out;
@@ -118,8 +150,8 @@ class AdminMonitoringController extends Controller
 
     protected function gatherFailedJobs(): array
     {
-        if (! Schema::hasTable('failed_jobs')) {
-            return ['exists' => false, 'count' => 0, 'recent' => []];
+        if (!Schema::hasTable('failed_jobs')) {
+            return ['exists' => false, 'count' => 0, 'recent' => [], 'warning' => false];
         }
 
         $count = DB::table('failed_jobs')->count();
@@ -127,42 +159,73 @@ class AdminMonitoringController extends Controller
         $recent = DB::table('failed_jobs')
             ->orderByDesc('failed_at')
             ->limit(10)
-            ->get(['id','queue','exception','failed_at'])
+            ->get(['id', 'queue', 'exception', 'failed_at'])
             ->map(fn($r) => [
                 'id' => $r->id,
                 'queue' => $r->queue,
                 'failed_at' => $r->failed_at,
+                'failed_at_human' => Carbon::parse($r->failed_at)->diffForHumans(),
                 'exception' => $this->summarizeException($r->exception),
-            ])->values();
+            ])->values()->toArray();
 
-        return ['exists' => true, 'count' => (int) $count, 'recent' => $recent];
+        return [
+            'exists' => true,
+            'count' => (int) $count,
+            'recent' => $recent,
+            'warning' => $count > self::WARNING_FAILED_JOBS,
+        ];
     }
 
     protected function gatherIngestionActivity(): array
     {
-        $out = [];
+        $out = [
+            'wikidata' => [],
+            'musicbrainz' => [],
+            'last_activity' => null,
+            'minutes_since_activity' => null,
+            'warning' => false,
+        ];
 
         if (Schema::hasTable('data_source_queries')) {
             $rows = DB::table('data_source_queries')
-                ->whereIn('data_source', ['wikidata','musicbrainz'])
+                ->whereIn('data_source', ['wikidata', 'musicbrainz'])
                 ->orderByDesc('created_at')
-                ->limit(10)
-                ->get(['id','data_source','name','query','created_at'])
-                ->groupBy('data_source');
+                ->limit(20)
+                ->get(['id', 'data_source', 'name', 'query', 'created_at']);
 
-            foreach (['wikidata','musicbrainz'] as $source) {
-                $out[$source] = isset($rows[$source])
-                    ? $rows[$source]->map(fn($r) => [
+            $grouped = $rows->groupBy('data_source');
+
+            foreach (['wikidata', 'musicbrainz'] as $source) {
+                $out[$source] = isset($grouped[$source])
+                    ? $grouped[$source]->take(10)->map(fn($r) => [
                         'id' => $r->id,
                         'name' => $r->name,
                         'query' => $r->query,
                         'at' => $r->created_at,
+                        'at_human' => Carbon::parse($r->created_at)->diffForHumans(),
                     ])->values()->toArray()
                     : [];
+            }
+
+            // Find most recent activity
+            $lastRow = $rows->first();
+            if ($lastRow) {
+                $lastTime = Carbon::parse($lastRow->created_at);
+                $out['last_activity'] = $lastTime->toIso8601String();
+                $out['minutes_since_activity'] = (int) $lastTime->diffInMinutes(now());
+                $out['warning'] = $out['minutes_since_activity'] > self::WARNING_NO_ACTIVITY_MINUTES;
             }
         }
 
         return $out;
+    }
+
+    protected function gatherHeartbeats(): array
+    {
+        return [
+            'recent' => JobHeartbeat::recent(15),
+            'summary' => JobHeartbeat::summary(60),
+        ];
     }
 
     protected function gatherEnvironment(): array
@@ -178,21 +241,73 @@ class AdminMonitoringController extends Controller
         }
 
         return [
-            'app_env' => env('APP_ENV'),
+            'app_env' => config('app.env'),
+            'app_debug' => config('app.debug'),
             'php_version' => PHP_VERSION,
+            'laravel_version' => app()->version(),
             'git_commit' => $git,
             'queue_connection' => config('queue.default'),
             'cache_driver' => config('cache.default'),
+            'db_connection' => config('database.default'),
         ];
+    }
+
+    protected function generateWarnings(array $metrics): array
+    {
+        $warnings = [];
+
+        // Queue depth warnings
+        if ($metrics['queues']['redis_available']) {
+            foreach ($metrics['queues']['queues'] as $name => $queue) {
+                if (($queue['depth'] ?? 0) > self::WARNING_QUEUE_DEPTH) {
+                    $warnings[] = [
+                        'type' => 'queue_depth',
+                        'level' => 'warning',
+                        'message' => "Queue '{$name}' has {$queue['depth']} pending jobs",
+                    ];
+                }
+            }
+        } else {
+            $warnings[] = [
+                'type' => 'redis',
+                'level' => 'error',
+                'message' => 'Redis is not available - queue monitoring disabled',
+            ];
+        }
+
+        // Failed jobs warning
+        if ($metrics['failed_jobs']['count'] > 0) {
+            $level = $metrics['failed_jobs']['count'] > self::WARNING_FAILED_JOBS ? 'error' : 'warning';
+            $warnings[] = [
+                'type' => 'failed_jobs',
+                'level' => $level,
+                'message' => "{$metrics['failed_jobs']['count']} failed jobs in queue",
+            ];
+        }
+
+        // Ingestion activity warning
+        if ($metrics['ingestion_activity']['warning']) {
+            $mins = $metrics['ingestion_activity']['minutes_since_activity'];
+            $warnings[] = [
+                'type' => 'ingestion',
+                'level' => 'warning',
+                'message' => "No ingestion activity for {$mins} minutes",
+            ];
+        }
+
+        return $warnings;
     }
 
     protected function summarizeException(?string $text): ?string
     {
-        if (! $text) {
+        if (!$text) {
             return null;
         }
 
         $line = strtok($text, "\n");
+        if ($line === false) {
+            return null;
+        }
         return strlen($line) > 200 ? substr($line, 0, 197) . '...' : $line;
     }
 }
