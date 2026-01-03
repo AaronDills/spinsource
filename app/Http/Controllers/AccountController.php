@@ -252,7 +252,22 @@ class AccountController extends Controller
                 ->toArray();
         }
 
-        // MySQL/PostgreSQL use YEAR function
+        if ($driver === 'pgsql') {
+            // PostgreSQL uses DATE_PART for date extraction
+            return $user->ratings()
+                ->selectRaw("DATE_PART('year', created_at) as year, COUNT(*) as count, AVG(rating) as avg_rating")
+                ->groupByRaw("DATE_PART('year', created_at)")
+                ->orderBy('year')
+                ->get()
+                ->map(fn ($stat) => [
+                    'year' => (int) $stat->year,
+                    'count' => $stat->count,
+                    'avg_rating' => round($stat->avg_rating, 1),
+                ])
+                ->toArray();
+        }
+
+        // MySQL uses YEAR function
         return $user->ratings()
             ->selectRaw('YEAR(created_at) as year, COUNT(*) as count, AVG(rating) as avg_rating')
             ->groupBy('year')
