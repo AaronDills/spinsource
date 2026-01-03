@@ -10,6 +10,13 @@ use Illuminate\Support\Facades\Log;
 
 class WikidataSeedGenres extends WikidataJob
 {
+    public function __construct(
+        public int $afterOid = 0,
+        public int $limit = 10000
+    ) {
+        parent::__construct();
+    }
+
     public function handle(): void
     {
         $this->withHeartbeat(function () {
@@ -21,16 +28,23 @@ class WikidataSeedGenres extends WikidataJob
     {
         $this->logStart('Seed genres');
 
-        $sparql = $this->sparqlLoader->load('genres/seed_genres');
+        $afterFilter = $this->afterOid > 0
+            ? "FILTER(?oid > {$this->afterOid})"
+            : '';
 
-        $response = $this->wikidata->querySparql($sparql);
+        $sparql = DataSourceQuery::get('genres', 'wikidata', [
+            'after_filter' => $afterFilter,
+            'limit' => $this->limit,
+        ]);
 
-        DataSourceQuery::updateOrCreate(
-            ['name' => 'genres/seed_genres', 'data_source' => 'wikidata'],
-            ['query_type' => 'sparql', 'query' => $sparql]
-        );
+        $response = $this->executeWdqsRequest($sparql);
 
-        $results = $response['results']['bindings'] ?? [];
+        if ($response === null) {
+            // Rate limited - job has been released
+            return;
+        }
+
+        $results = $response->json('results.bindings', []);
         if (empty($results)) {
             $this->logEnd('Seed genres (no results)');
 
@@ -41,12 +55,12 @@ class WikidataSeedGenres extends WikidataJob
         $genresToUpsert = [];
 
         foreach ($results as $row) {
-            $genreQid = $this->wikidata->extractQid($row['genre']['value'] ?? null);
+            $genreQid = $this->qidFromEntityUrl($row['genre']['value'] ?? null);
             if (! $genreQid) {
                 continue;
             }
 
-            $countryQid = $this->wikidata->extractQid($row['country']['value'] ?? null);
+            $countryQid = $this->qidFromEntityUrl($row['country']['value'] ?? null);
 
             if ($countryQid) {
                 $countriesToUpsert[$countryQid] = [

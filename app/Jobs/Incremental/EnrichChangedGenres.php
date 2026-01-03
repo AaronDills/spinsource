@@ -34,18 +34,21 @@ class EnrichChangedGenres extends WikidataJob
             'count' => count($this->genreQids),
         ]);
 
-        $sparql = $this->sparqlLoader->load('genres/enrich_genres');
+        // Format QIDs as VALUES clause for SPARQL
+        $values = implode(' ', array_map(fn ($qid) => "wd:{$qid}", $this->genreQids));
 
-        $response = $this->wikidata->querySparql($sparql, [
-            'genreQids' => $this->genreQids,
+        $sparql = DataSourceQuery::get('incremental/genre_enrich', 'wikidata', [
+            'values' => $values,
         ]);
 
-        DataSourceQuery::updateOrCreate(
-            ['name' => 'genres/enrich_genres', 'data_source' => 'wikidata'],
-            ['query_type' => 'sparql', 'query' => $sparql, 'response_meta' => ['qids' => $this->genreQids]]
-        );
+        $response = $this->executeWdqsRequest($sparql);
 
-        $results = $response['results']['bindings'] ?? [];
+        if ($response === null) {
+            // Rate limited - job has been released
+            return;
+        }
+
+        $results = $response->json('results.bindings', []);
         if (empty($results)) {
             $this->logEnd('Enrich changed genres (no results)', [
                 'count' => count($this->genreQids),
@@ -58,12 +61,12 @@ class EnrichChangedGenres extends WikidataJob
         $genreUpdates = [];
 
         foreach ($results as $row) {
-            $genreQid = $this->wikidata->extractQid($row['genre']['value'] ?? null);
+            $genreQid = $this->qidFromEntityUrl($row['genre']['value'] ?? null);
             if (! $genreQid) {
                 continue;
             }
 
-            $countryQid = $this->wikidata->extractQid($row['country']['value'] ?? null);
+            $countryQid = $this->qidFromEntityUrl($row['country']['value'] ?? null);
             if ($countryQid) {
                 $countriesToUpsert[$countryQid] = [
                     'wikidata_qid' => $countryQid,

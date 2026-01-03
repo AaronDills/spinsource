@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Enrich artist data from Wikidata using an "enrich artist" sparql query.
+ * Enrich artist data from Wikidata using multiple SPARQL queries.
  * Updates core fields + links + country association + genres.
  */
 class WikidataEnrichArtists extends WikidataJob
@@ -40,19 +40,44 @@ class WikidataEnrichArtists extends WikidataJob
             'count' => count($this->artistQids),
         ]);
 
-        $sparql = $this->sparqlLoader->load('artists/enrich_artist');
+        // Format QIDs as VALUES clause for SPARQL
+        $values = implode(' ', array_map(fn ($qid) => "wd:{$qid}", $this->artistQids));
 
-        $response = $this->wikidata->querySparql($sparql, [
-            'artistQids' => $this->artistQids,
+        // Fetch basic artist data
+        $basicSparql = DataSourceQuery::get('artist_enrich_basic', 'wikidata', [
+            'values' => $values,
         ]);
 
-        DataSourceQuery::updateOrCreate(
-            ['name' => 'artists/enrich_artist', 'data_source' => 'wikidata'],
-            ['query_type' => 'sparql', 'query' => $sparql, 'response_meta' => ['qids' => $this->artistQids]]
-        );
+        $basicResponse = $this->executeWdqsRequest($basicSparql);
+        if ($basicResponse === null) {
+            return; // Rate limited
+        }
 
-        $results = $response['results']['bindings'] ?? [];
-        if (empty($results)) {
+        // Fetch genre relationships
+        $genresSparql = DataSourceQuery::get('artist_enrich_genres', 'wikidata', [
+            'values' => $values,
+        ]);
+
+        $genresResponse = $this->executeWdqsRequest($genresSparql);
+        if ($genresResponse === null) {
+            return; // Rate limited
+        }
+
+        // Fetch social/streaming links
+        $linksSparql = DataSourceQuery::get('artist_enrich_links', 'wikidata', [
+            'values' => $values,
+        ]);
+
+        $linksResponse = $this->executeWdqsRequest($linksSparql);
+        if ($linksResponse === null) {
+            return; // Rate limited
+        }
+
+        $basicResults = $basicResponse->json('results.bindings', []);
+        $genresResults = $genresResponse->json('results.bindings', []);
+        $linksResults = $linksResponse->json('results.bindings', []);
+
+        if (empty($basicResults)) {
             $this->logEnd('Enrich artists (no results)', [
                 'count' => count($this->artistQids),
             ]);
@@ -65,15 +90,16 @@ class WikidataEnrichArtists extends WikidataJob
         $artistUpdates = [];
         $artistLinks = [];
 
-        foreach ($results as $row) {
+        // Process basic data
+        foreach ($basicResults as $row) {
             $artistUri = $row['artist']['value'] ?? null;
-            $artistQid = $this->wikidata->extractQid($artistUri);
+            $artistQid = $this->qidFromEntityUrl($artistUri);
 
             if (! $artistQid) {
                 continue;
             }
 
-            $countryQid = $this->wikidata->extractQid($row['country']['value'] ?? null);
+            $countryQid = $this->qidFromEntityUrl($row['country']['value'] ?? null);
 
             if ($countryQid) {
                 $countriesToUpsert[$countryQid] = [
@@ -82,41 +108,58 @@ class WikidataEnrichArtists extends WikidataJob
                 ];
             }
 
-            $genreQid = $this->wikidata->extractQid($row['genre']['value'] ?? null);
-            if ($genreQid) {
-                $genresToAttach[$artistQid][] = $genreQid;
-            }
+            $isHuman = ($row['isHuman']['value'] ?? 'false') === 'true';
 
             $artistUpdates[$artistQid] = [
                 'artistLabel' => $row['artistLabel']['value'] ?? null,
                 'artistDescription' => $row['artistDescription']['value'] ?? null,
-                'instanceOf' => $this->wikidata->extractQid($row['instanceOf']['value'] ?? null),
+                'instanceOf' => $isHuman ? 'Q5' : null, // Q5 = human
                 'countryQid' => $countryQid,
                 'officialWebsite' => $row['officialWebsite']['value'] ?? null,
-                'wikipediaUrl' => $row['wikipediaUrl']['value'] ?? null,
                 'imageCommons' => $row['imageCommons']['value'] ?? null,
                 'logoCommons' => $row['logoCommons']['value'] ?? null,
                 'commonsCategory' => $row['commonsCategory']['value'] ?? null,
                 'formed' => $row['formed']['value'] ?? null,
                 'disbanded' => $row['disbanded']['value'] ?? null,
                 'musicBrainzId' => $row['musicBrainzId']['value'] ?? null,
-                'givenName' => $row['givenName']['value'] ?? null,
-                'familyName' => $row['familyName']['value'] ?? null,
-                'twitter' => $row['twitter']['value'] ?? null,
-                'instagram' => $row['instagram']['value'] ?? null,
-                'facebook' => $row['facebook']['value'] ?? null,
-                'youtubeChannel' => $row['youtubeChannel']['value'] ?? null,
-                'spotifyArtistId' => $row['spotifyArtistId']['value'] ?? null,
-                'appleMusicArtistId' => $row['appleMusicArtistId']['value'] ?? null,
+                'givenName' => $row['givenNameLabel']['value'] ?? null,
+                'familyName' => $row['familyNameLabel']['value'] ?? null,
             ];
+        }
 
+        // Process genre relationships
+        foreach ($genresResults as $row) {
+            $artistQid = $this->qidFromEntityUrl($row['artist']['value'] ?? null);
+            $genreQid = $this->qidFromEntityUrl($row['genre']['value'] ?? null);
+
+            if ($artistQid && $genreQid) {
+                $genresToAttach[$artistQid][] = $genreQid;
+            }
+        }
+
+        // Process links/social data
+        foreach ($linksResults as $row) {
+            $artistQid = $this->qidFromEntityUrl($row['artist']['value'] ?? null);
+
+            if (! $artistQid || ! isset($artistUpdates[$artistQid])) {
+                continue;
+            }
+
+            // Add link data to artist updates
+            $artistUpdates[$artistQid]['twitter'] = $row['twitter']['value'] ?? null;
+            $artistUpdates[$artistQid]['instagram'] = $row['instagram']['value'] ?? null;
+            $artistUpdates[$artistQid]['facebook'] = $row['facebook']['value'] ?? null;
+            $artistUpdates[$artistQid]['youtubeChannel'] = $row['youtubeChannel']['value'] ?? null;
+            $artistUpdates[$artistQid]['spotifyArtistId'] = $row['spotifyArtistId']['value'] ?? null;
+            $artistUpdates[$artistQid]['appleMusicArtistId'] = $row['appleMusicArtistId']['value'] ?? null;
+
+            // Build artist links array
             foreach ([
                 ArtistLinkType::Twitter->value => $row['twitter']['value'] ?? null,
                 ArtistLinkType::Instagram->value => $row['instagram']['value'] ?? null,
                 ArtistLinkType::Facebook->value => $row['facebook']['value'] ?? null,
                 ArtistLinkType::YouTube->value => $row['youtubeChannel']['value'] ?? null,
-                ArtistLinkType::OfficialWebsite->value => $row['officialWebsite']['value'] ?? null,
-                ArtistLinkType::Wikipedia->value => $row['wikipediaUrl']['value'] ?? null,
+                ArtistLinkType::OfficialWebsite->value => $artistUpdates[$artistQid]['officialWebsite'] ?? null,
             ] as $type => $url) {
                 if ($url) {
                     $artistLinks[] = [
@@ -162,7 +205,6 @@ class WikidataEnrichArtists extends WikidataJob
                     $artist->instance_of = $data['instanceOf'] ?? $artist->instance_of;
 
                     $artist->official_website = $data['officialWebsite'] ?? $artist->official_website;
-                    $artist->wikipedia_url = $data['wikipediaUrl'] ?? $artist->wikipedia_url;
 
                     $artist->image_commons = $data['imageCommons'] ?? $artist->image_commons;
                     $artist->logo_commons = $data['logoCommons'] ?? $artist->logo_commons;

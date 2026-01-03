@@ -35,18 +35,21 @@ class WikidataRecomputeSortNames extends WikidataJob
             'count' => count($this->artistQids),
         ]);
 
-        $sparql = $this->sparqlLoader->load('artists/name_components_for_sort');
+        // Format QIDs as VALUES clause for SPARQL
+        $values = implode(' ', array_map(fn ($qid) => "wd:{$qid}", $this->artistQids));
 
-        $response = $this->wikidata->querySparql($sparql, [
-            'artistQids' => $this->artistQids,
+        $sparql = DataSourceQuery::get('artist_name_components', 'wikidata', [
+            'values' => $values,
         ]);
 
-        DataSourceQuery::updateOrCreate(
-            ['name' => 'artists/name_components_for_sort', 'data_source' => 'wikidata'],
-            ['query_type' => 'sparql', 'query' => $sparql, 'response_meta' => ['qids' => $this->artistQids]]
-        );
+        $response = $this->executeWdqsRequest($sparql);
 
-        $results = $response['results']['bindings'] ?? [];
+        if ($response === null) {
+            // Rate limited - job has been released
+            return;
+        }
+
+        $results = $response->json('results.bindings', []);
 
         $nameComponents = [];
         foreach ($results as $row) {
@@ -55,7 +58,7 @@ class WikidataRecomputeSortNames extends WikidataJob
                 continue;
             }
 
-            $qid = $this->wikidata->extractQid($artist['value'] ?? null);
+            $qid = $this->qidFromEntityUrl($artist['value'] ?? null);
             if (! $qid) {
                 continue;
             }

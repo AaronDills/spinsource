@@ -37,18 +37,21 @@ class WikidataEnrichAlbumCovers extends WikidataJob
             'count' => count($this->albumQids),
         ]);
 
-        $sparql = $this->sparqlLoader->load('albums/enrich_album_covers');
+        // Format QIDs as VALUES clause for SPARQL
+        $values = implode(' ', array_map(fn ($qid) => "wd:{$qid}", $this->albumQids));
 
-        $response = $this->wikidata->querySparql($sparql, [
-            'albumQids' => $this->albumQids,
+        $sparql = DataSourceQuery::get('album_covers', 'wikidata', [
+            'values' => $values,
         ]);
 
-        DataSourceQuery::updateOrCreate(
-            ['name' => 'albums/enrich_album_covers', 'data_source' => 'wikidata'],
-            ['query_type' => 'sparql', 'query' => $sparql, 'response_meta' => ['qids' => $this->albumQids]]
-        );
+        $response = $this->executeWdqsRequest($sparql);
 
-        $results = $response['results']['bindings'] ?? [];
+        if ($response === null) {
+            // Rate limited - job has been released
+            return;
+        }
+
+        $results = $response->json('results.bindings', []);
         if (empty($results)) {
             $this->logEnd('Enrich album covers (no results)', [
                 'count' => count($this->albumQids),
@@ -60,13 +63,13 @@ class WikidataEnrichAlbumCovers extends WikidataJob
         $byQid = [];
         foreach ($results as $row) {
             $album = $row['album'] ?? null;
-            $cover = $row['coverImageCommons'] ?? null;
+            $cover = $row['coverImage'] ?? null;
 
             if (! $album || ! $cover) {
                 continue;
             }
 
-            $qid = $this->wikidata->extractQid($album['value'] ?? null);
+            $qid = $this->qidFromEntityUrl($album['value'] ?? null);
             $coverValue = $cover['value'] ?? null;
 
             if (! $qid || ! $coverValue) {

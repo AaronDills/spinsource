@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\Http;
  */
 trait HandlesWikidataRateLimits
 {
-    use HandlesApiRateLimits;
+    use HandlesApiRateLimits {
+        HandlesApiRateLimits::rateLimitedStatusHandlers as baseRateLimitedStatusHandlers;
+    }
 
     /**
      * Get the config prefix for Wikidata.
@@ -39,7 +41,7 @@ trait HandlesWikidataRateLimits
      */
     protected function rateLimitedStatusHandlers(): array
     {
-        $handlers = parent::rateLimitedStatusHandlers();
+        $handlers = $this->baseRateLimitedStatusHandlers();
 
         // Wikidata blocks IPs with 403 - wait longer
         $handlers[403] = [
