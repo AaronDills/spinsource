@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Spin Source') }}</title>
+        <title>{{ $title ?? config('app.name', 'Spin Source') }}</title>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
@@ -16,7 +16,7 @@
     </head>
     <body class="font-sans antialiased">
         <div class="min-h-screen flex flex-col bg-gray-100">
-            @include('layouts.navigation')
+            <x-site-header :transparent="$transparentHeader ?? false" />
 
             <!-- Page Heading -->
             @isset($header)
@@ -32,7 +32,7 @@
                 {{ $slot }}
             </main>
 
-            <x-site-footer />
+            <x-site-footer :showRecentReviews="$showRecentReviews ?? true" />
         </div>
     </body>
 </html>
