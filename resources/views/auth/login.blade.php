@@ -2,6 +2,10 @@
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
 
+    @if ($errors->has('oauth'))
+        <x-input-error :messages="$errors->get('oauth')" class="mb-4" />
+    @endif
+
     <form method="POST" action="{{ route('login') }}">
         @csrf
 
@@ -44,4 +48,6 @@
             </x-primary-button>
         </div>
     </form>
+
+    @include('auth.partials.social-login')
 </x-guest-layout>

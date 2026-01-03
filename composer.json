@@ -8,11 +8,13 @@
     "require": {
         "php": "^8.2",
         "laravel/framework": "^12.0",
+        "laravel/socialite": "^5.11",
         "laravel/pulse": "^1.4",
         "laravel/scout": "^10.23",
         "laravel/tinker": "^2.10.1",
         "nesbot/carbon": "^3.0",
         "opcodesio/log-viewer": "^3.21",
+        "socialiteproviders/spotify": "^5.5",
         "symfony/clock": "^7.0",
         "typesense/typesense-php": "^5.2"
     },
