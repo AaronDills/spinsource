@@ -82,7 +82,7 @@ class DataSourceQueryTest extends TestCase
     public function test_get_method_throws_for_missing_query(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Query not found');
+        $this->expectExceptionMessageMatches('/^Query not found: .*\\(data_source: wikidata\\)$/');
 
         DataSourceQuery::get('nonexistent', 'wikidata');
     }
@@ -96,7 +96,7 @@ class DataSourceQueryTest extends TestCase
         ]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Query is inactive');
+        $this->expectExceptionMessageMatches('/^Query is inactive: .*\\(data_source: wikidata\\)$/');
 
         DataSourceQuery::get('inactive-query', 'wikidata');
     }
