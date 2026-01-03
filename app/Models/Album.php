@@ -59,11 +59,17 @@ class Album extends Model
         'cover_image_commons',
         'source',
         'source_last_synced_at',
+        'tracklist_attempted_at',
+        'tracklist_fetched_at',
+        'tracklist_fetch_attempts',
     ];
 
     protected $casts = [
         'release_date' => 'date',
         'source_last_synced_at' => 'datetime',
+        'tracklist_attempted_at' => 'datetime',
+        'tracklist_fetched_at' => 'datetime',
+        'tracklist_fetch_attempts' => 'integer',
     ];
 
     public function artist(): BelongsTo

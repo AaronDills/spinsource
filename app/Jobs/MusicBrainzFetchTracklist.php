@@ -8,6 +8,36 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Fetch and sync album tracklist from MusicBrainz.
+ *
+ * ## Idempotency Strategy
+ *
+ * This job is designed to be safely retried multiple times without side effects:
+ *
+ * 1. **Stable unique key**: Uses (album_id, musicbrainz_recording_id) as the unique
+ *    constraint instead of position. Recording MBIDs are stable across releases.
+ *
+ * 2. **Upsert-based**: All track writes use upsert keyed on recording MBID,
+ *    so retries update existing tracks rather than creating duplicates.
+ *
+ * 3. **Atomic updates**: Track sync happens in a transaction. Either all tracks
+ *    are updated or none are (no partial states).
+ *
+ * 4. **Timestamp tracking**:
+ *    - `tracklist_attempted_at`: Set at job start, tracks when we tried
+ *    - `tracklist_fetched_at`: Set only on successful completion
+ *    - `tracklist_fetch_attempts`: Incremented each attempt
+ *
+ * 5. **Graceful resume**: If partial data exists from a previous failed run,
+ *    the upsert will update those records rather than failing.
+ *
+ * 6. **Safe track cleanup**: Only removes tracks not in the new set AFTER
+ *    successful upsert, within the same transaction.
+ *
+ * @see \App\Models\Album - Has tracklist_* columns for tracking
+ * @see \App\Models\Track - Uses musicbrainz_recording_id as stable key
+ */
 class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 {
     public int $uniqueFor = 3600; // 1 hour
@@ -35,62 +65,39 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     {
         $album = Album::find($this->albumId);
 
-        if (! $album || ! $album->musicbrainz_release_group_mbid) {
-            Log::warning('MusicBrainz tracklist: Album not found or no release group ID', [
+        if (! $album) {
+            Log::warning('MusicBrainz tracklist: Album not found', [
                 'albumId' => $this->albumId,
             ]);
-
-            $this->recordHeartbeat('missing_album', ['album_id' => $this->albumId]);
-
             return;
         }
 
-        // Check if we should use an existing selected release
-        $useExistingRelease = ! $this->forceReselect && $album->selected_release_mbid;
+        // Mark attempt timestamp and increment counter BEFORE any work
+        // This ensures we track attempts even if the job fails
+        $album->update([
+            'tracklist_attempted_at' => now(),
+            'tracklist_fetch_attempts' => ($album->tracklist_fetch_attempts ?? 0) + 1,
+        ]);
 
-        if ($useExistingRelease) {
-            // Use previously selected release for stability
-            $releaseId = $album->selected_release_mbid;
-
-            Log::debug('MusicBrainz: Using existing selected release', [
+        if (! $album->musicbrainz_release_group_mbid) {
+            Log::warning('MusicBrainz tracklist: No release group MBID', [
                 'albumId' => $this->albumId,
-                'releaseId' => $releaseId,
             ]);
-        } else {
-            // Step 1: Fetch releases for this release group
-            $releases = $this->fetchReleases($album->musicbrainz_release_group_mbid);
-
-            if ($releases === null) {
-                // Rate limited, job was released
-                $this->recordHeartbeat('rate_limited_releases', ['album_id' => $this->albumId]);
-                return;
-            }
-
-            if (empty($releases)) {
-                Log::info('MusicBrainz: No releases found for release group', [
-                    'albumId' => $this->albumId,
-                    'releaseGroupId' => $album->musicbrainz_release_group_mbid,
-                ]);
-
-                $this->recordHeartbeat('no_releases', ['album_id' => $this->albumId, 'release_group' => $album->musicbrainz_release_group_mbid]);
-
-                return;
-            }
-
-            // Step 2: Pick the best release
-            $bestRelease = $this->pickBestRelease($releases);
-            $releaseId = $bestRelease['id'];
-
-            // Heartbeat with release selection info
-            $this->recordHeartbeat('selected_release', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
+            $this->recordHeartbeat('missing_release_group', ['album_id' => $this->albumId]);
+            return;
         }
 
-        // Step 3: Fetch full tracklist for the selected release
-        $media = $this->fetchTracklist($releaseId);
+        // Determine which release to use
+        $releaseId = $this->selectRelease($album);
+        if (! $releaseId) {
+            return; // Already logged in selectRelease
+        }
 
+        // Fetch tracklist from MusicBrainz
+        $media = $this->fetchTracklist($releaseId);
         if ($media === null) {
-            // Rate limited, job was released
-            $this->recordHeartbeat('rate_limited_tracklist', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
+            // Rate limited - job was released for retry
+            $this->recordHeartbeat('rate_limited', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
             return;
         }
 
@@ -99,20 +106,215 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                 'albumId' => $this->albumId,
                 'releaseId' => $releaseId,
             ]);
-
             $this->recordHeartbeat('no_media', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
-
             return;
         }
 
-        // Step 4: Upsert tracks
-        $this->upsertTracks($album, $releaseId, $media);
+        // Sync tracks to database (idempotent operation)
+        $trackCount = $this->syncTracks($album, $releaseId, $media);
+
+        // Mark successful completion
+        $album->update([
+            'tracklist_fetched_at' => now(),
+            'selected_release_mbid' => $releaseId,
+            'musicbrainz_release_mbid' => $album->musicbrainz_release_mbid ?? $releaseId,
+        ]);
+
+        Log::info('MusicBrainz: Tracklist synced successfully', [
+            'albumId' => $album->id,
+            'albumTitle' => $album->title,
+            'releaseId' => $releaseId,
+            'trackCount' => $trackCount,
+            'attempts' => $album->tracklist_fetch_attempts,
+        ]);
+    }
+
+    /**
+     * Select which MusicBrainz release to use for tracklist.
+     *
+     * Uses existing selection if available (for stability), otherwise
+     * picks the best release from the release group.
+     *
+     * @return string|null Release MBID or null if unavailable
+     */
+    protected function selectRelease(Album $album): ?string
+    {
+        // Use existing selection for stability (unless forced to reselect)
+        if (! $this->forceReselect && $album->selected_release_mbid) {
+            Log::debug('MusicBrainz: Using existing selected release', [
+                'albumId' => $this->albumId,
+                'releaseId' => $album->selected_release_mbid,
+            ]);
+            return $album->selected_release_mbid;
+        }
+
+        // Fetch releases for this release group
+        $releases = $this->fetchReleases($album->musicbrainz_release_group_mbid);
+
+        if ($releases === null) {
+            // Rate limited - job will be retried
+            $this->recordHeartbeat('rate_limited_releases', ['album_id' => $this->albumId]);
+            return null;
+        }
+
+        if (empty($releases)) {
+            Log::info('MusicBrainz: No releases found for release group', [
+                'albumId' => $this->albumId,
+                'releaseGroupId' => $album->musicbrainz_release_group_mbid,
+            ]);
+            $this->recordHeartbeat('no_releases', [
+                'album_id' => $this->albumId,
+                'release_group' => $album->musicbrainz_release_group_mbid,
+            ]);
+            return null;
+        }
+
+        // Pick the best release using scoring algorithm
+        $bestRelease = $this->pickBestRelease($releases);
+        $releaseId = $bestRelease['id'];
+
+        $this->recordHeartbeat('selected_release', [
+            'album_id' => $this->albumId,
+            'release_id' => $releaseId,
+        ]);
+
+        return $releaseId;
+    }
+
+    /**
+     * Sync tracks to database using idempotent upsert.
+     *
+     * Strategy:
+     * 1. Parse all tracks from MusicBrainz response
+     * 2. Upsert based on (album_id, musicbrainz_recording_id) - stable key
+     * 3. Remove orphaned tracks (those not in the new set)
+     * 4. All within a transaction for atomicity
+     *
+     * @return int Number of tracks synced
+     */
+    protected function syncTracks(Album $album, string $releaseId, array $media): int
+    {
+        $tracks = $this->parseTracksFromMedia($album->id, $releaseId, $media);
+
+        if (empty($tracks)) {
+            Log::warning('MusicBrainz: No tracks parsed from media', [
+                'albumId' => $album->id,
+                'releaseId' => $releaseId,
+            ]);
+            return 0;
+        }
+
+        // Separate tracks with and without recording IDs
+        // Tracks WITH recording IDs use upsert (stable key)
+        // Tracks WITHOUT recording IDs use position-based matching (fallback)
+        $tracksWithRecordingId = array_filter($tracks, fn($t) => $t['musicbrainz_recording_id'] !== null);
+        $tracksWithoutRecordingId = array_filter($tracks, fn($t) => $t['musicbrainz_recording_id'] === null);
+
+        DB::transaction(function () use ($album, $tracksWithRecordingId, $tracksWithoutRecordingId, $tracks) {
+            // Upsert tracks with recording IDs (stable, idempotent)
+            if (! empty($tracksWithRecordingId)) {
+                Track::upsert(
+                    array_values($tracksWithRecordingId),
+                    ['album_id', 'musicbrainz_recording_id'], // Unique key
+                    ['musicbrainz_release_id', 'title', 'position', 'number', 'disc_number', 'length_ms', 'source', 'source_last_synced_at', 'updated_at']
+                );
+            }
+
+            // Handle tracks without recording IDs (rare edge case)
+            // These use position-based matching as fallback
+            foreach ($tracksWithoutRecordingId as $trackData) {
+                Track::updateOrCreate(
+                    [
+                        'album_id' => $trackData['album_id'],
+                        'disc_number' => $trackData['disc_number'],
+                        'position' => $trackData['position'],
+                        'musicbrainz_recording_id' => null,
+                    ],
+                    $trackData
+                );
+            }
+
+            // Remove orphaned tracks (not in the new set)
+            // Only tracks with recording IDs that aren't in our new set
+            $validRecordingIds = array_filter(
+                array_column($tracks, 'musicbrainz_recording_id'),
+                fn($id) => $id !== null
+            );
+
+            // Delete tracks with recording IDs not in the new set
+            if (! empty($validRecordingIds)) {
+                Track::where('album_id', $album->id)
+                    ->whereNotNull('musicbrainz_recording_id')
+                    ->whereNotIn('musicbrainz_recording_id', $validRecordingIds)
+                    ->delete();
+            }
+
+            // For tracks without recording IDs, delete by position not in new set
+            $validPositions = collect($tracksWithoutRecordingId)
+                ->map(fn($t) => $t['disc_number'] . ':' . $t['position'])
+                ->toArray();
+
+            if (! empty($tracksWithoutRecordingId)) {
+                Track::where('album_id', $album->id)
+                    ->whereNull('musicbrainz_recording_id')
+                    ->get(['id', 'disc_number', 'position'])
+                    ->filter(fn($t) => ! in_array($t->disc_number . ':' . $t->position, $validPositions))
+                    ->each(fn($t) => $t->delete());
+            }
+        });
+
+        return count($tracks);
+    }
+
+    /**
+     * Parse tracks from MusicBrainz media response.
+     *
+     * @return array Track data ready for upsert
+     */
+    protected function parseTracksFromMedia(int $albumId, string $releaseId, array $media): array
+    {
+        $tracks = [];
+        $now = now();
+
+        foreach ($media as $medium) {
+            $discNumber = $medium['position'] ?? 1;
+            $fallbackPosition = 0;
+
+            foreach ($medium['tracks'] ?? [] as $track) {
+                $fallbackPosition++;
+                $recording = $track['recording'] ?? [];
+
+                // Recording MBID is the stable identifier
+                $recordingId = $recording['id'] ?? null;
+
+                // Raw track number from MusicBrainz (may be "A1", "B2", etc.)
+                $rawNumber = $track['number'] ?? null;
+
+                // Compute numeric position
+                $position = $this->parseTrackPosition($track, $fallbackPosition);
+
+                $tracks[] = [
+                    'album_id' => $albumId,
+                    'musicbrainz_recording_id' => $recordingId,
+                    'musicbrainz_release_id' => $releaseId,
+                    'title' => $track['title'] ?? $recording['title'] ?? 'Unknown',
+                    'position' => $position,
+                    'number' => $rawNumber,
+                    'disc_number' => $discNumber,
+                    'length_ms' => $track['length'] ?? $recording['length'] ?? null,
+                    'source' => 'musicbrainz',
+                    'source_last_synced_at' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+        }
+
+        return $tracks;
     }
 
     /**
      * Fetch all releases for a release group.
-     *
-     * Includes media to get format and track-count for scoring.
      *
      * @return array|null Null if rate-limited
      */
@@ -240,100 +442,6 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     }
 
     /**
-     * Upsert tracks to the database.
-     *
-     * Uses atomic transaction to prevent partial deletes if insert fails.
-     * Position is computed as a stable numeric value even for vinyl-style
-     * track numbers like "A1". Raw number is preserved separately.
-     *
-     * Also updates the album's selected_release_mbid to track which release
-     * was used for tracklist import.
-     */
-    private function upsertTracks(Album $album, string $releaseId, array $media): void
-    {
-        $tracks = [];
-        $now = now();
-
-        foreach ($media as $medium) {
-            $discNumber = $medium['position'] ?? 1;
-            $fallbackPosition = 0;
-
-            foreach ($medium['tracks'] ?? [] as $track) {
-                $fallbackPosition++;
-                $recording = $track['recording'] ?? [];
-
-                // Raw track number from MusicBrainz (may be "A1", "B2", etc.)
-                $rawNumber = $track['number'] ?? null;
-
-                // Compute numeric position:
-                // 1. Prefer explicit 'position' from MB if present and valid
-                // 2. Otherwise use fallback counter (1, 2, 3...) per medium
-                $position = $this->parseTrackPosition($track, $fallbackPosition);
-
-                $tracks[] = [
-                    'album_id' => $album->id,
-                    'musicbrainz_recording_id' => $recording['id'] ?? null,
-                    'musicbrainz_release_id' => $releaseId,
-                    'title' => $track['title'] ?? $recording['title'] ?? 'Unknown',
-                    'position' => $position,
-                    'number' => $rawNumber,
-                    'disc_number' => $discNumber,
-                    'length_ms' => $track['length'] ?? $recording['length'] ?? null,
-                    'source' => 'musicbrainz',
-                    'source_last_synced_at' => $now,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-            }
-        }
-
-        if (empty($tracks)) {
-            Log::warning('MusicBrainz: No tracks parsed from media', [
-                'albumId' => $album->id,
-                'releaseId' => $releaseId,
-            ]);
-
-            return;
-        }
-
-        // Atomic: either all tracks are replaced or none are.
-        // Upsert keyed on (album_id, disc_number, position) updates existing rows.
-        // Also stores which release was selected for tracklist import.
-        DB::transaction(function () use ($album, $tracks, $releaseId) {
-            // Store the selected release MBID on the album
-            $album->update([
-                'selected_release_mbid' => $releaseId,
-                // If no canonical release MBID set yet, use this one
-                'musicbrainz_release_mbid' => $album->musicbrainz_release_mbid ?? $releaseId,
-            ]);
-
-            Track::upsert(
-                $tracks,
-                ['album_id', 'disc_number', 'position'],
-                ['musicbrainz_recording_id', 'musicbrainz_release_id', 'title', 'number', 'length_ms', 'source', 'source_last_synced_at', 'updated_at']
-            );
-
-            // Remove stale tracks not in the new set
-            // Build a set of valid (disc_number, position) pairs
-            $validKeys = collect($tracks)
-                ->map(fn ($t) => $t['disc_number'].':'.$t['position'])
-                ->all();
-
-            Track::where('album_id', $album->id)
-                ->get(['id', 'disc_number', 'position'])
-                ->filter(fn ($t) => ! in_array($t->disc_number.':'.$t->position, $validKeys))
-                ->each(fn ($t) => $t->delete());
-        });
-
-        Log::info('MusicBrainz: Tracks saved', [
-            'albumId' => $album->id,
-            'albumTitle' => $album->title,
-            'releaseId' => $releaseId,
-            'trackCount' => count($tracks),
-        ]);
-    }
-
-    /**
      * Parse track position to a stable numeric value.
      *
      * MusicBrainz provides:
@@ -353,21 +461,16 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
         }
 
         // Fallback: use sequential counter per medium
-        // This handles vinyl tracks ("A1", "B2") and missing data gracefully
         return $fallback;
     }
 
     /**
      * Count edition keywords in release title and disambiguation.
-     *
-     * Checks title and disambiguation fields for keywords that indicate
-     * special editions (deluxe, remastered, etc.) which are less desirable
-     * than standard releases for tracklist stability.
      */
     private function countEditionKeywords(array $release): int
     {
         $searchText = strtolower(
-            ($release['title'] ?? '').' '.($release['disambiguation'] ?? '')
+            ($release['title'] ?? '') . ' ' . ($release['disambiguation'] ?? '')
         );
 
         $count = 0;
