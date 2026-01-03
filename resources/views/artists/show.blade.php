@@ -1,14 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $artist->name }} - Spinsource</title>
-    @vite('resources/css/app.css')
+    <title>{{ $artist->name }} - {{ config('app.name', 'Spinsource') }}</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="bg-gray-50 text-gray-900">
-<div class="max-w-5xl mx-auto py-10 px-6">
-    <div class="bg-white shadow rounded-lg p-6">
+<body class="bg-gray-100 dark:bg-gray-900 min-h-screen">
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <a href="/" class="inline-flex items-center text-blue-600 dark:text-blue-400 hover:underline mb-6">
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        Back to Search
+    </a>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden p-6 sm:p-8">
         <div class="flex items-start gap-6">
             @if($artist->image_commons)
                 <img
@@ -18,28 +25,28 @@
                 />
             @endif
 
-            <div class="flex-1">
-                <h1 class="text-3xl font-bold">{{ $artist->name }}</h1>
+            <div class="flex-1 min-w-0">
+                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">{{ $artist->name }}</h1>
 
                 @if($artist->description)
-                    <p class="mt-2 text-gray-700">{{ $artist->description }}</p>
+                    <p class="mt-2 text-gray-700 dark:text-gray-300">{{ $artist->description }}</p>
                 @endif
 
-                <div class="mt-4 flex flex-wrap gap-3 text-sm">
+                <div class="mt-4 flex flex-wrap gap-2 text-sm">
                     @if($artist->wikidata_qid)
                         <a
-                            class="inline-flex items-center px-3 py-1 rounded bg-gray-100 hover:bg-gray-200"
+                            class="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
                             href="https://www.wikidata.org/wiki/{{ $artist->wikidata_qid }}"
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Wikidata: {{ $artist->wikidata_qid }}
+                            Wikidata
                         </a>
                     @endif
 
                     @if($artist->wikipedia_url)
                         <a
-                            class="inline-flex items-center px-3 py-1 rounded bg-gray-100 hover:bg-gray-200"
+                            class="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
                             href="{{ $artist->wikipedia_url }}"
                             target="_blank"
                             rel="noreferrer"
@@ -50,7 +57,7 @@
 
                     @if($artist->official_website)
                         <a
-                            class="inline-flex items-center px-3 py-1 rounded bg-gray-100 hover:bg-gray-200"
+                            class="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
                             href="{{ $artist->official_website }}"
                             target="_blank"
                             rel="noreferrer"
@@ -61,7 +68,7 @@
 
                     @foreach($deduplicatedLinks as $link)
                         <a
-                            class="inline-flex items-center px-3 py-1 rounded bg-gray-100 hover:bg-gray-200"
+                            class="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
                             href="{{ $link->url }}"
                             target="_blank"
                             rel="noreferrer"
@@ -107,19 +114,21 @@
         </div>
 
         @if(count($albumsByType))
-            @foreach($albumsByType as $group)
-                <h2 class="text-xl font-semibold mt-8">{{ $group['label'] }}</h2>
-                <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    @foreach($group['albums'] as $album)
-                        <a href="{{ route('album.show', $album) }}" class="block bg-gray-50 rounded p-4 hover:bg-gray-100">
-                            <div class="font-semibold">{{ $album->title }}</div>
-                            @if($album->release_year)
-                                <div class="text-sm text-gray-600">{{ $album->release_year }}</div>
-                            @endif
-                        </a>
-                    @endforeach
-                </div>
-            @endforeach
+            <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                @foreach($albumsByType as $group)
+                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 @if(!$loop->first) mt-8 @endif mb-4">{{ $group['label'] }}</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        @foreach($group['albums'] as $album)
+                            <a href="{{ route('album.show', $album) }}" class="block bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                                <div class="font-semibold text-gray-900 dark:text-gray-100">{{ $album->title }}</div>
+                                @if($album->release_year)
+                                    <div class="text-sm text-gray-600 dark:text-gray-400">{{ $album->release_year }}</div>
+                                @endif
+                            </a>
+                        @endforeach
+                    </div>
+                @endforeach
+            </div>
         @endif
     </div>
 </div>
