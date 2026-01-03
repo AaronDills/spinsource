@@ -1,7 +1,20 @@
 <x-app-layout>
 <div class="container mx-auto p-4 max-w-7xl">
+    <!-- Tab Navigation -->
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Monitoring</h1>
+        <div class="flex items-center gap-4">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Console</h1>
+            <nav class="flex gap-2">
+                <a href="{{ route('admin.monitoring') }}"
+                   class="px-4 py-2 text-sm font-medium rounded-lg transition-colors bg-blue-600 text-white">
+                    Monitoring
+                </a>
+                <a href="{{ route('admin.logs') }}"
+                   class="px-4 py-2 text-sm font-medium rounded-lg transition-colors text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    Logs
+                </a>
+            </nav>
+        </div>
         <div class="flex items-center gap-4">
             <span id="last-updated" class="text-sm text-gray-500 dark:text-gray-400"></span>
             <button onclick="fetchData()" class="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">

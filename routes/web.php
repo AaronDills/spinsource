@@ -20,6 +20,15 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/admin/monitoring/data', [\App\Http\Controllers\AdminMonitoringController::class, 'data'])
         ->name('admin.monitoring.data');
+
+    Route::get('/admin/logs', [\App\Http\Controllers\AdminLogController::class, 'index'])
+        ->name('admin.logs');
+
+    Route::get('/admin/logs/data', [\App\Http\Controllers\AdminLogController::class, 'data'])
+        ->name('admin.logs.data');
+
+    Route::get('/admin/logs/files', [\App\Http\Controllers\AdminLogController::class, 'files'])
+        ->name('admin.logs.files');
 });
 
 Route::get('/search', [SearchController::class, 'search'])->name('search');
