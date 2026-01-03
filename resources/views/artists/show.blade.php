@@ -6,7 +6,7 @@
         <title>{{ $artist->name }} - {{ config('app.name', 'Laravel') }}</title>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="bg-gray-100 dark:bg-gray-900 min-h-screen">
+    <body class="bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 min-h-screen text-gray-100">
         <div class="max-w-4xl mx-auto px-4 py-8">
             <a href="/" class="inline-flex items-center text-blue-600 dark:text-blue-400 hover:underline mb-6">
                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -15,7 +15,7 @@
                 Back to Search
             </a>
 
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+            <div class="card">
                 <div class="p-6 sm:p-8">
                     <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
                         @if($artist->image_commons)
