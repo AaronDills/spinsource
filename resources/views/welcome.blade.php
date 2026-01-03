@@ -17,7 +17,7 @@
                         @keydown.arrow-up.prevent="highlightPrev"
                         @keydown.enter.prevent="handleEnter"
                         placeholder="Search artists and albums..."
-                        class="flex-1 px-4 py-3 text-lg rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        class="flex-1 px-4 py-3 text-lg rounded-lg border border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-lg shadow-blue-500/10"
                     >
                     <button
                         type="submit"
@@ -39,15 +39,15 @@
                     x-transition:leave="transition ease-in duration-75"
                     x-transition:leave-start="opacity-100 scale-100"
                     x-transition:leave-end="opacity-0 scale-95"
-                    class="absolute z-50 w-full mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+                    class="absolute z-50 w-full mt-2 bg-gray-900 rounded-lg shadow-lg border border-gray-800 overflow-hidden text-gray-100"
                 >
                     <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <template x-for="(result, index) in results" :key="result.type + '-' + result.id">
                             <li
                                 @click="selectResult(result)"
                                 @mouseenter="highlighted = index"
-                                :class="{ 'bg-blue-50 dark:bg-blue-900/30': highlighted === index }"
-                                class="px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                :class="{ 'bg-blue-900/40': highlighted === index }"
+                                class="px-4 py-3 cursor-pointer hover:bg-gray-800"
                             >
                                 <div class="flex items-center gap-3">
                                     <span

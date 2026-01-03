@@ -7,7 +7,7 @@
 
     <div class="py-12">
         <div class="max-w-2xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="card">
                 <div class="p-6">
                     <!-- Album Info -->
                     <div class="flex gap-4 mb-6 pb-6 border-b border-gray-200">
