@@ -43,15 +43,13 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
     {
         // If no specific QIDs provided, load from checkpoint meta
         $qids = $this->artistQids;
+        $checkpoint = null;
+        $shouldClearMeta = false;
 
         if (empty($qids)) {
             $checkpoint = IngestionCheckpoint::forKey('artists');
             $qids = $checkpoint->getMeta('changed_artist_qids', []);
-
-            // Clear the meta after reading
-            if (! empty($qids)) {
-                $checkpoint->setMeta('changed_artist_qids', []);
-            }
+            $shouldClearMeta = ! empty($qids);
         }
 
         if (empty($qids)) {
@@ -72,6 +70,12 @@ class RefreshAlbumsForChangedArtists extends WikidataJob
                 // Dispatch remaining chunks as separate jobs
                 self::dispatch($chunk, $this->chunkSize);
             }
+        }
+
+        // Clear the meta AFTER successful processing (idempotent pattern)
+        // This ensures if the job fails and retries, we'll re-read the same QIDs
+        if ($shouldClearMeta && $checkpoint) {
+            $checkpoint->setMeta('changed_artist_qids', []);
         }
 
         $this->finishJobRun();

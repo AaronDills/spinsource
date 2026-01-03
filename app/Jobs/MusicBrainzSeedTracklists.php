@@ -33,6 +33,13 @@ class MusicBrainzSeedTracklists extends MusicBrainzJob implements ShouldBeUnique
 
     public function handle(): void
     {
+        $this->withHeartbeat(function () {
+            $this->doHandle();
+        }, ['afterAlbumId' => $this->afterAlbumId, 'batchSize' => $this->batchSize]);
+    }
+
+    protected function doHandle(): void
+    {
         $albums = Album::query()
             ->whereNotNull('musicbrainz_release_group_mbid')
             ->whereDoesntHave('tracks')

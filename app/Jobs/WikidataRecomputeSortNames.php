@@ -24,6 +24,13 @@ class WikidataRecomputeSortNames extends WikidataJob
             return;
         }
 
+        $this->withHeartbeat(function () {
+            $this->doHandle();
+        }, ['qids' => count($this->artistQids)]);
+    }
+
+    protected function doHandle(): void
+    {
         $this->logStart('Recompute artist sort names', [
             'count' => count($this->artistQids),
         ]);
@@ -68,9 +75,10 @@ class WikidataRecomputeSortNames extends WikidataJob
         }
 
         $artists = Artist::whereIn('wikidata_qid', $this->artistQids)
-            ->get(['id', 'wikidata_qid', 'name', 'sort_name']);
+            ->get(['id', 'wikidata_qid', 'name', 'sort_name', 'source', 'source_last_synced_at']);
 
         $updated = 0;
+        $now = now();
 
         foreach ($artists as $artist) {
             $components = $nameComponents[$artist->wikidata_qid] ?? [];
@@ -85,6 +93,8 @@ class WikidataRecomputeSortNames extends WikidataJob
 
             if ($newSort !== $artist->sort_name && $newSort !== null) {
                 $artist->sort_name = $newSort;
+                $artist->source = 'wikidata';
+                $artist->source_last_synced_at = $now;
                 $artist->save();
                 $updated++;
             }

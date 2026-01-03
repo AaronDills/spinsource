@@ -133,7 +133,9 @@ class WikidataEnrichArtists extends WikidataJob
             }
         }
 
-        DB::transaction(function () use ($countriesToUpsert, $artistUpdates, $genresToAttach, $artistLinks) {
+        $errors = 0;
+
+        DB::transaction(function () use ($countriesToUpsert, $artistUpdates, $genresToAttach, $artistLinks, &$errors) {
             // Countries
             if (! empty($countriesToUpsert)) {
                 Country::upsert(array_values($countriesToUpsert), ['wikidata_qid'], ['name']);
@@ -151,46 +153,60 @@ class WikidataEnrichArtists extends WikidataJob
 
             // Artists
             $artists = Artist::whereIn('wikidata_qid', array_keys($artistUpdates))->get()->keyBy('wikidata_qid');
+            $now = now();
 
             foreach ($artistUpdates as $qid => $data) {
-                /** @var \App\Models\Artist|null $artist */
-                $artist = $artists->get($qid);
-                if (! $artist) {
-                    continue;
+                try {
+                    /** @var \App\Models\Artist|null $artist */
+                    $artist = $artists->get($qid);
+                    if (! $artist) {
+                        continue;
+                    }
+
+                    $artist->description = $data['artistDescription'] ?? $artist->description;
+                    $artist->instance_of = $data['instanceOf'] ?? $artist->instance_of;
+
+                    $artist->official_website = $data['officialWebsite'] ?? $artist->official_website;
+                    $artist->wikipedia_url = $data['wikipediaUrl'] ?? $artist->wikipedia_url;
+
+                    $artist->image_commons = $data['imageCommons'] ?? $artist->image_commons;
+                    $artist->logo_commons = $data['logoCommons'] ?? $artist->logo_commons;
+                    $artist->commons_category = $data['commonsCategory'] ?? $artist->commons_category;
+
+                    $artist->formed = $data['formed'] ?? $artist->formed;
+                    $artist->disbanded = $data['disbanded'] ?? $artist->disbanded;
+
+                    $artist->musicbrainz_id = $data['musicBrainzId'] ?? $artist->musicbrainz_id;
+
+                    $artist->given_name = $data['givenName'] ?? $artist->given_name;
+                    $artist->family_name = $data['familyName'] ?? $artist->family_name;
+
+                    $artist->twitter = $data['twitter'] ?? $artist->twitter;
+                    $artist->instagram = $data['instagram'] ?? $artist->instagram;
+                    $artist->facebook = $data['facebook'] ?? $artist->facebook;
+                    $artist->youtube_channel = $data['youtubeChannel'] ?? $artist->youtube_channel;
+
+                    $artist->spotify_artist_id = $data['spotifyArtistId'] ?? $artist->spotify_artist_id;
+                    $artist->apple_music_artist_id = $data['appleMusicArtistId'] ?? $artist->apple_music_artist_id;
+
+                    $countryQid = $data['countryQid'] ?? null;
+                    if ($countryQid && $countryIdByQid->has($countryQid)) {
+                        $artist->country_id = $countryIdByQid->get($countryQid);
+                    }
+
+                    // Track provenance
+                    $artist->source = 'wikidata';
+                    $artist->source_last_synced_at = $now;
+
+                    $artist->save();
+                } catch (\Throwable $e) {
+                    $errors++;
+                    Log::warning('WikidataEnrichArtists: Failed to update artist', [
+                        'qid' => $qid,
+                        'error' => $e->getMessage(),
+                    ]);
+                    // Continue with next artist - don't fail entire batch
                 }
-
-                $artist->description = $data['artistDescription'] ?? $artist->description;
-                $artist->instance_of = $data['instanceOf'] ?? $artist->instance_of;
-
-                $artist->official_website = $data['officialWebsite'] ?? $artist->official_website;
-                $artist->wikipedia_url = $data['wikipediaUrl'] ?? $artist->wikipedia_url;
-
-                $artist->image_commons = $data['imageCommons'] ?? $artist->image_commons;
-                $artist->logo_commons = $data['logoCommons'] ?? $artist->logo_commons;
-                $artist->commons_category = $data['commonsCategory'] ?? $artist->commons_category;
-
-                $artist->formed = $data['formed'] ?? $artist->formed;
-                $artist->disbanded = $data['disbanded'] ?? $artist->disbanded;
-
-                $artist->musicbrainz_id = $data['musicBrainzId'] ?? $artist->musicbrainz_id;
-
-                $artist->given_name = $data['givenName'] ?? $artist->given_name;
-                $artist->family_name = $data['familyName'] ?? $artist->family_name;
-
-                $artist->twitter = $data['twitter'] ?? $artist->twitter;
-                $artist->instagram = $data['instagram'] ?? $artist->instagram;
-                $artist->facebook = $data['facebook'] ?? $artist->facebook;
-                $artist->youtube_channel = $data['youtubeChannel'] ?? $artist->youtube_channel;
-
-                $artist->spotify_artist_id = $data['spotifyArtistId'] ?? $artist->spotify_artist_id;
-                $artist->apple_music_artist_id = $data['appleMusicArtistId'] ?? $artist->apple_music_artist_id;
-
-                $countryQid = $data['countryQid'] ?? null;
-                if ($countryQid && $countryIdByQid->has($countryQid)) {
-                    $artist->country_id = $countryIdByQid->get($countryQid);
-                }
-
-                $artist->save();
             }
 
             // Genres attach
@@ -237,11 +253,13 @@ class WikidataEnrichArtists extends WikidataJob
         Log::info('Enriched artists', [
             'artists' => count($artistUpdates),
             'countries' => count($countriesToUpsert),
+            'errors' => $errors,
         ]);
 
         $this->logEnd('Enrich artists', [
             'artists' => count($artistUpdates),
             'countries' => count($countriesToUpsert),
+            'errors' => $errors,
         ]);
     }
 }

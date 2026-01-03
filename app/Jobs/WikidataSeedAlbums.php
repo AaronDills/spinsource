@@ -31,6 +31,13 @@ class WikidataSeedAlbums extends WikidataJob implements ShouldBeUnique
 
     public function handle(): void
     {
+        $this->withHeartbeat(function () {
+            $this->doHandle();
+        }, ['afterArtistId' => $this->afterArtistId, 'batchSize' => $this->artistBatchSize]);
+    }
+
+    protected function doHandle(): void
+    {
         $artistBatchSize = max(5, min(100, (int) $this->artistBatchSize));
 
         // Cursor-based paging over local artists table (avoids DB OFFSET)

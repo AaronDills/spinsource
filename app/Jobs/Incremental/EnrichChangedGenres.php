@@ -23,6 +23,13 @@ class EnrichChangedGenres extends WikidataJob
             return;
         }
 
+        $this->withHeartbeat(function () {
+            $this->doHandle();
+        }, ['qids' => count($this->genreQids)]);
+    }
+
+    protected function doHandle(): void
+    {
         $this->logStart('Enrich changed genres', [
             'count' => count($this->genreQids),
         ]);
@@ -88,12 +95,16 @@ class EnrichChangedGenres extends WikidataJob
                     ->map(fn ($c) => $c->id);
             }
 
+            $now = now();
+
             foreach ($genreUpdates as $qid => $data) {
                 $countryId = $data['country_qid'] ? ($countryIdByQid[$data['country_qid']] ?? null) : null;
 
                 Genre::where('wikidata_qid', $qid)->update([
                     'name' => $data['name'],
                     'country_id' => $countryId,
+                    'source' => 'wikidata',
+                    'source_last_synced_at' => $now,
                 ]);
             }
         });

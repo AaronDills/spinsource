@@ -26,6 +26,13 @@ class WikidataEnrichAlbumCovers extends WikidataJob
             return;
         }
 
+        $this->withHeartbeat(function () {
+            $this->doHandle();
+        }, ['qids' => count($this->albumQids)]);
+    }
+
+    protected function doHandle(): void
+    {
         $this->logStart('Enrich album covers', [
             'count' => count($this->albumQids),
         ]);
@@ -75,11 +82,15 @@ class WikidataEnrichAlbumCovers extends WikidataJob
         }
 
         $updated = 0;
+        $now = now();
+
         foreach ($byQid as $qid => $coverCommons) {
             $affected = Album::where('wikidata_qid', $qid)
                 ->whereNull('cover_image_commons')
                 ->update([
                     'cover_image_commons' => $coverCommons,
+                    'source' => 'wikidata',
+                    'source_last_synced_at' => $now,
                 ]);
 
             $updated += (int) $affected;

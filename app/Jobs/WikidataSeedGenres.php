@@ -12,6 +12,13 @@ class WikidataSeedGenres extends WikidataJob
 {
     public function handle(): void
     {
+        $this->withHeartbeat(function () {
+            $this->doHandle();
+        });
+    }
+
+    protected function doHandle(): void
+    {
         $this->logStart('Seed genres');
 
         $sparql = $this->sparqlLoader->load('genres/seed_genres');
@@ -71,12 +78,19 @@ class WikidataSeedGenres extends WikidataJob
                     ->map(fn ($c) => $c->id);
             }
 
+            $now = now();
+
             foreach ($genresToUpsert as $g) {
                 $countryId = $g['country_qid'] ? ($countryIdByQid[$g['country_qid']] ?? null) : null;
 
                 Genre::updateOrCreate(
                     ['wikidata_qid' => $g['wikidata_qid']],
-                    ['name' => $g['name'], 'country_id' => $countryId]
+                    [
+                        'name' => $g['name'],
+                        'country_id' => $countryId,
+                        'source' => 'wikidata',
+                        'source_last_synced_at' => $now,
+                    ]
                 );
             }
         });

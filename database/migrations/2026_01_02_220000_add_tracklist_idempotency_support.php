@@ -51,11 +51,11 @@ return new class extends Migration
 
         // Add unique constraint on (album_id, musicbrainz_recording_id) if not exists
         // Note: The original (album_id, disc_number, position) was just an index, not a unique constraint
-        $indexExists = DB::select("
-            SHOW INDEX FROM tracks WHERE Key_name = 'tracks_album_recording_unique'
-        ");
+        $indexExists = collect(Schema::getIndexes('tracks'))
+            ->pluck('name')
+            ->contains('tracks_album_recording_unique');
 
-        if (empty($indexExists)) {
+        if (! $indexExists) {
             Schema::table('tracks', function (Blueprint $table) {
                 $table->unique(['album_id', 'musicbrainz_recording_id'], 'tracks_album_recording_unique');
             });
