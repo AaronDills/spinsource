@@ -144,36 +144,20 @@ class AdminMonitoringController extends Controller
 
         if (Schema::hasTable('data_source_queries')) {
             $rows = DB::table('data_source_queries')
-                ->whereIn('source', ['wikidata','musicbrainz'])
+                ->whereIn('data_source', ['wikidata','musicbrainz'])
                 ->orderByDesc('created_at')
                 ->limit(10)
-                ->get(['id','source','query','created_at'])
-                ->groupBy('source');
+                ->get(['id','data_source','name','query','created_at'])
+                ->groupBy('data_source');
 
             foreach (['wikidata','musicbrainz'] as $source) {
                 $out[$source] = isset($rows[$source])
-                    ? array_values(array_map(fn($r) => [
-                        'id' => $r->id,
-                        'query' => $r->query,
-                        'at' => $r->created_at,
-                    ], $rows[$source]))
-                    : [];
-            }
-        } elseif (Schema::hasTable('ingestion_events')) {
-            $rows = DB::table('ingestion_events')
-                ->whereIn('source', ['wikidata','musicbrainz'])
-                ->orderByDesc('created_at')
-                ->limit(10)
-                ->get(['id','source','name','created_at'])
-                ->groupBy('source');
-
-            foreach (['wikidata','musicbrainz'] as $source) {
-                $out[$source] = isset($rows[$source])
-                    ? array_values(array_map(fn($r) => [
+                    ? $rows[$source]->map(fn($r) => [
                         'id' => $r->id,
                         'name' => $r->name,
+                        'query' => $r->query,
                         'at' => $r->created_at,
-                    ], $rows[$source]))
+                    ])->values()->toArray()
                     : [];
             }
         }
@@ -186,7 +170,7 @@ class AdminMonitoringController extends Controller
         $git = null;
         try {
             if (file_exists(base_path('.git/HEAD'))) {
-                $commit = trim(shell_exec('git rev-parse --short HEAD 2>/dev/null')) ?: null;
+                $commit = trim(shell_exec('git rev-parse --short HEAD 2>/dev/null') ?? '') ?: null;
                 $git = $commit;
             }
         } catch (\Throwable $e) {
