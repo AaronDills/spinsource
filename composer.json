@@ -11,7 +11,9 @@
         "laravel/pulse": "^1.4",
         "laravel/scout": "^10.23",
         "laravel/tinker": "^2.10.1",
+        "nesbot/carbon": "^3.0",
         "opcodesio/log-viewer": "^3.21",
+        "symfony/clock": "^7.0",
         "typesense/typesense-php": "^5.2"
     },
     "require-dev": {

@@ -43,15 +43,10 @@ class WikidataEnrichAlbumCovers extends WikidataJob
             'albumQids' => $this->albumQids,
         ]);
 
-        DataSourceQuery::create([
-            'source' => 'wikidata',
-            'query_type' => 'sparql',
-            'query_name' => 'albums/enrich_album_covers',
-            'query' => $sparql,
-            'response_meta' => [
-                'qids' => $this->albumQids,
-            ],
-        ]);
+        DataSourceQuery::updateOrCreate(
+            ['name' => 'albums/enrich_album_covers', 'data_source' => 'wikidata'],
+            ['query_type' => 'sparql', 'query' => $sparql, 'response_meta' => ['qids' => $this->albumQids]]
+        );
 
         $results = $response['results']['bindings'] ?? [];
         if (empty($results)) {

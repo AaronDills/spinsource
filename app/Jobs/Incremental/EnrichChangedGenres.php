@@ -40,15 +40,10 @@ class EnrichChangedGenres extends WikidataJob
             'genreQids' => $this->genreQids,
         ]);
 
-        DataSourceQuery::create([
-            'source' => 'wikidata',
-            'query_type' => 'sparql',
-            'query_name' => 'genres/enrich_genres',
-            'query' => $sparql,
-            'response_meta' => [
-                'qids' => $this->genreQids,
-            ],
-        ]);
+        DataSourceQuery::updateOrCreate(
+            ['name' => 'genres/enrich_genres', 'data_source' => 'wikidata'],
+            ['query_type' => 'sparql', 'query' => $sparql, 'response_meta' => ['qids' => $this->genreQids]]
+        );
 
         $results = $response['results']['bindings'] ?? [];
         if (empty($results)) {

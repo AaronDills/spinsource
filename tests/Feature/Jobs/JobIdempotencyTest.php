@@ -108,7 +108,7 @@ class JobIdempotencyTest extends TestCase
             'name' => 'United Kingdom',
         ]);
         $this->assertDatabaseHas('data_source_queries', [
-            'query_name' => 'genres/seed_genres',
+            'name' => 'genres/seed_genres',
             'data_source' => 'wikidata',
         ]);
 
@@ -127,7 +127,7 @@ class JobIdempotencyTest extends TestCase
             'wikidata_qid' => 'Q145',
             'name' => 'UK',
         ]);
-        $this->assertDatabaseCount('data_source_queries', 2);
+        $this->assertDatabaseCount('data_source_queries', 1);
 
         Carbon::setTestNow();
     }
@@ -224,7 +224,7 @@ class JobIdempotencyTest extends TestCase
             $albumWithoutCover->source_last_synced_at->toDateTimeString()
         );
         $this->assertDatabaseHas('data_source_queries', [
-            'query_name' => 'albums/enrich_album_covers',
+            'name' => 'albums/enrich_album_covers',
             'data_source' => 'wikidata',
         ]);
 

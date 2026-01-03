@@ -46,15 +46,10 @@ class WikidataEnrichArtists extends WikidataJob
             'artistQids' => $this->artistQids,
         ]);
 
-        DataSourceQuery::create([
-            'source' => 'wikidata',
-            'query_type' => 'sparql',
-            'query_name' => 'artists/enrich_artist',
-            'query' => $sparql,
-            'response_meta' => [
-                'qids' => $this->artistQids,
-            ],
-        ]);
+        DataSourceQuery::updateOrCreate(
+            ['name' => 'artists/enrich_artist', 'data_source' => 'wikidata'],
+            ['query_type' => 'sparql', 'query' => $sparql, 'response_meta' => ['qids' => $this->artistQids]]
+        );
 
         $results = $response['results']['bindings'] ?? [];
         if (empty($results)) {
