@@ -58,6 +58,50 @@
                             Website
                         </a>
                     @endif
+
+                    @foreach($deduplicatedLinks as $link)
+                        <a
+                            class="inline-flex items-center px-3 py-1 rounded bg-gray-100 hover:bg-gray-200"
+                            href="{{ $link->url }}"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            @switch($link->type)
+                                @case('twitter')
+                                    Twitter
+                                    @break
+                                @case('instagram')
+                                    Instagram
+                                    @break
+                                @case('facebook')
+                                    Facebook
+                                    @break
+                                @case('youtube')
+                                    YouTube
+                                    @break
+                                @case('spotify')
+                                    Spotify
+                                    @break
+                                @case('apple_music')
+                                    Apple Music
+                                    @break
+                                @case('bandcamp')
+                                    Bandcamp
+                                    @break
+                                @case('soundcloud')
+                                    SoundCloud
+                                    @break
+                                @case('deezer')
+                                    Deezer
+                                    @break
+                                @case('reddit')
+                                    Reddit
+                                    @break
+                                @default
+                                    {{ ucfirst($link->type) }}
+                            @endswitch
+                        </a>
+                    @endforeach
                 </div>
             </div>
         </div>

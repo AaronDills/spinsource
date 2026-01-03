@@ -1,6 +1,4 @@
-@extends('layouts.app')
-
-@section('content')
+<x-app-layout>
 <div class="container mx-auto p-4">
     <h1 class="text-2xl font-bold mb-4">Admin Monitoring</h1>
 
@@ -79,4 +77,4 @@ function renderData(d) {
 fetchData();
 setInterval(fetchData, 7000);
 </script>
-@endsection
+</x-app-layout>
