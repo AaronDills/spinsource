@@ -2,6 +2,6 @@
 set -e
 changed_php="$(git diff --cached --name-only --diff-filter=ACM | grep '\.php$' || true)"
 [ -z "$changed_php" ] && exit 0
-composer pint -- "$changed_php"
+echo "$changed_php" | xargs composer pint --
 # re-stage formatted files
-git add $changed_php
+echo "$changed_php" | xargs git add

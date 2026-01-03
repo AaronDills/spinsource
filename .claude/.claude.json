@@ -1,0 +1,25 @@
+{
+    "project": "spinsource",
+    "language": "PHP / Laravel",
+    "php_version": "8.2",
+    "coding_practices": [
+      "Follow existing Laravel conventions and PSR-12 formatting.",
+      "Use composer scripts where available (e.g., \"composer test\", \"composer pint\").",
+      "Prefer explicit exception expectations that mirror real messages."
+    ],
+    "testing": {
+      "require_unit_tests_for_new_features": true,
+      "commands": [
+        "composer test",
+        "composer pint"
+      ],
+      "notes": "Add or update unit tests for any new feature or bug fix before merging."
+    },
+    "ci_considerations": [
+      "Ensure composer.lock matches the target PHP version used in CI.",
+      "Prefer running Pint and the test suite locally before push."
+    ],
+    "documentation": {
+      "pull_request_summary": "Summarize code changes and cite affected areas; include testing performed."
+    }
+  }

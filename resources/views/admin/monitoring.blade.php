@@ -134,6 +134,57 @@
                     </div>
                 </div>
 
+                <!-- Coverage Metrics -->
+                <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
+                    <div class="px-4 py-3 bg-gray-800/50 border-b border-gray-700">
+                        <h2 class="font-semibold text-gray-100 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                            Coverage Metrics
+                        </h2>
+                    </div>
+                    <div id="coverage-content" class="p-4">
+                        <div class="animate-pulse space-y-2">
+                            <div class="h-4 bg-gray-700 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sync Recency -->
+                <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
+                    <div class="px-4 py-3 bg-gray-800/50 border-b border-gray-700">
+                        <h2 class="font-semibold text-gray-100 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Sync Recency
+                        </h2>
+                    </div>
+                    <div id="sync-content" class="p-4">
+                        <div class="animate-pulse space-y-2">
+                            <div class="h-4 bg-gray-700 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Rates -->
+                <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
+                    <div class="px-4 py-3 bg-gray-800/50 border-b border-gray-700">
+                        <h2 class="font-semibold text-gray-100 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                            </svg>
+                            Error Rates
+                        </h2>
+                    </div>
+                    <div id="error-rates-content" class="p-4">
+                        <div class="animate-pulse space-y-2">
+                            <div class="h-4 bg-gray-700 rounded w-3/4"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Environment / Health -->
                 <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700">
                     <div class="px-4 py-3 bg-gray-800/50 border-b border-gray-700">
@@ -228,6 +279,9 @@ function renderData(d) {
     renderIngestion(d.ingestion_activity);
     renderHeartbeats(d.heartbeats);
     renderEnvironment(d.env);
+    renderCoverage(d.coverage);
+    renderSyncRecency(d.sync_recency);
+    renderErrorRates(d.error_rates);
 }
 
 function renderWarnings(warnings) {
@@ -485,9 +539,9 @@ function renderHeartbeats(heartbeats) {
         html += '<div class="space-y-2 max-h-64 overflow-y-auto">';
         runs.forEach(run => {
             const statusColors = {
-                completed: 'bg-green-900/50 text-green-300 border-green-700',
-                failed: 'bg-red-900/50 text-red-300 border-red-700',
-                running: 'bg-blue-900/50 text-blue-300 border-blue-700',
+                completed: 'bg-green-600 text-white border-green-500',
+                failed: 'bg-red-600 text-white border-red-500',
+                running: 'bg-blue-600 text-white border-blue-500',
             };
             const statusClass = statusColors[run.status] || statusColors.running;
 
@@ -565,6 +619,185 @@ function renderEnvironment(env) {
             </div>
         </div>
     `;
+}
+
+function renderCoverage(coverage) {
+    const container = document.getElementById('coverage-content');
+
+    if (!coverage || (!coverage.albums?.total && !coverage.artists?.total && !coverage.genres?.total)) {
+        container.innerHTML = '<div class="text-gray-500">No coverage data available</div>';
+        return;
+    }
+
+    let html = '';
+
+    // Albums section
+    if (coverage.albums?.total) {
+        const a = coverage.albums;
+        html += `
+            <div class="mb-4">
+                <h4 class="text-sm font-medium text-gray-300 mb-2">Albums (${a.total.toLocaleString()})</h4>
+                <div class="space-y-1.5">
+                    ${renderProgressBar('Tracklists', a.with_tracklist, a.total, a.with_tracklist_pct)}
+                    ${renderProgressBar('MusicBrainz ID', a.with_mbid, a.total, a.with_mbid_pct)}
+                    ${renderProgressBar('Cover Art', a.with_cover, a.total, a.with_cover_pct)}
+                    ${renderProgressBar('Spotify ID', a.with_spotify, a.total, a.with_spotify_pct)}
+                    ${renderProgressBar('Apple Music ID', a.with_apple, a.total, a.with_apple_pct)}
+                </div>
+            </div>`;
+    }
+
+    // Artists section
+    if (coverage.artists?.total) {
+        const ar = coverage.artists;
+        html += `
+            <div class="mb-4">
+                <h4 class="text-sm font-medium text-gray-300 mb-2">Artists (${ar.total.toLocaleString()})</h4>
+                <div class="space-y-1.5">
+                    ${renderProgressBar('Wikipedia', ar.with_wikipedia, ar.total, ar.with_wikipedia_pct)}
+                    ${renderProgressBar('MusicBrainz ID', ar.with_mbid, ar.total, ar.with_mbid_pct)}
+                    ${renderProgressBar('Spotify ID', ar.with_spotify, ar.total, ar.with_spotify_pct)}
+                    ${renderProgressBar('Apple Music ID', ar.with_apple, ar.total, ar.with_apple_pct)}
+                    ${renderProgressBar('Discogs ID', ar.with_discogs, ar.total, ar.with_discogs_pct)}
+                </div>
+            </div>`;
+    }
+
+    // Genres section
+    if (coverage.genres?.total) {
+        const g = coverage.genres;
+        html += `
+            <div>
+                <h4 class="text-sm font-medium text-gray-300 mb-2">Genres (${g.total.toLocaleString()})</h4>
+                <div class="space-y-1.5">
+                    ${renderProgressBar('MusicBrainz ID', g.with_mbid, g.total, g.with_mbid_pct)}
+                    ${renderProgressBar('Parent Genre', g.with_parent, g.total, g.with_parent_pct)}
+                </div>
+            </div>`;
+    }
+
+    container.innerHTML = html || '<div class="text-gray-500">No coverage data</div>';
+}
+
+function renderProgressBar(label, value, total, pct) {
+    const color = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-red-500';
+    return `
+        <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-400 w-28 truncate" title="${label}">${label}</span>
+            <div class="flex-1 mx-2 h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div class="${color} h-full rounded-full transition-all" style="width: ${pct}%"></div>
+            </div>
+            <span class="text-gray-300 w-16 text-right">${pct}%</span>
+        </div>`;
+}
+
+function renderSyncRecency(sync) {
+    const container = document.getElementById('sync-content');
+
+    if (!sync?.available) {
+        container.innerHTML = '<div class="text-gray-500">Sync tracking not available (run migrations)</div>';
+        return;
+    }
+
+    let html = '';
+
+    // Currently running jobs
+    if (sync.running?.length > 0) {
+        html += `<div class="mb-4 p-2 bg-blue-900/30 border border-blue-700 rounded-lg">
+            <div class="text-xs text-blue-300 font-medium mb-1">Currently Running</div>`;
+        sync.running.forEach(job => {
+            html += `<div class="text-sm text-gray-100">${job.job_name} <span class="text-gray-500">(${job.started_at_human})</span></div>`;
+        });
+        html += '</div>';
+    }
+
+    // Scheduled syncs
+    const schedules = sync.schedules || {};
+    Object.entries(schedules).forEach(([key, s]) => {
+        const statusClass = s.warning
+            ? 'border-yellow-700 bg-yellow-900/20'
+            : 'border-gray-700';
+
+        const statusIcon = s.warning
+            ? '<svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>'
+            : '<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+
+        html += `
+            <div class="mb-3 p-2 border rounded-lg ${statusClass}">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium text-gray-100">${s.label}</span>
+                    ${statusIcon}
+                </div>
+                <div class="text-xs text-gray-500 mb-2">${s.schedule}</div>
+                ${s.last_finished_at_human
+                    ? `<div class="text-xs text-gray-400">Last run: <span class="text-gray-200">${s.last_finished_at_human}</span></div>`
+                    : '<div class="text-xs text-gray-500">Never run</div>'}
+                ${s.totals.processed > 0 ? `
+                    <div class="text-xs text-gray-500 mt-1">
+                        Processed: ${s.totals.processed.toLocaleString()}
+                        ${s.totals.created > 0 ? ` | Created: ${s.totals.created}` : ''}
+                        ${s.totals.updated > 0 ? ` | Updated: ${s.totals.updated}` : ''}
+                        ${s.totals.errors > 0 ? ` | <span class="text-red-400">Errors: ${s.totals.errors}</span>` : ''}
+                    </div>
+                ` : ''}
+            </div>`;
+    });
+
+    container.innerHTML = html || '<div class="text-gray-500">No sync data</div>';
+}
+
+function renderErrorRates(rates) {
+    const container = document.getElementById('error-rates-content');
+
+    if (!rates?.available) {
+        container.innerHTML = '<div class="text-gray-500">Error rate tracking not available</div>';
+        return;
+    }
+
+    let html = '';
+
+    // Overall stats
+    if (rates.overall) {
+        const o = rates.overall;
+        html += `
+            <div class="mb-4 p-2 bg-gray-800/50 rounded-lg border border-gray-700">
+                <div class="text-xs text-gray-400 mb-2">Overall Error Rates</div>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                        <span class="text-gray-500">Last hour:</span>
+                        <span class="${o.hourly_rate > 5 ? 'text-red-400' : 'text-gray-100'}">${o.hourly_rate}%</span>
+                        <span class="text-xs text-gray-600">(${o.hourly_failures} failures)</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Last 24h:</span>
+                        <span class="${o.daily_rate > 5 ? 'text-red-400' : 'text-gray-100'}">${o.daily_rate}%</span>
+                        <span class="text-xs text-gray-600">(${o.daily_failures} failures)</span>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    // Per-queue breakdown
+    html += '<div class="text-xs text-gray-400 mb-2">By Queue</div>';
+    html += '<div class="space-y-2">';
+
+    Object.entries(rates.sources || {}).forEach(([queue, r]) => {
+        const warningClass = r.warning ? 'border-red-700 bg-red-900/20' : 'border-gray-700';
+        const rateClass = r.hourly_rate > 5 ? 'text-red-400' : r.hourly_rate > 0 ? 'text-yellow-400' : 'text-green-400';
+
+        html += `
+            <div class="flex items-center justify-between p-2 rounded border ${warningClass}">
+                <span class="text-sm text-gray-300 capitalize">${queue}</span>
+                <div class="text-right">
+                    <span class="text-sm ${rateClass}">${r.hourly_rate}%</span>
+                    <span class="text-xs text-gray-500 ml-1">(${r.hourly_failures}/${r.hourly_failures + r.hourly_completions} jobs)</span>
+                </div>
+            </div>`;
+    });
+
+    html += '</div>';
+
+    container.innerHTML = html;
 }
 
 // Initial fetch and start polling
