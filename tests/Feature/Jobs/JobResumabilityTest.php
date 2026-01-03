@@ -42,8 +42,18 @@ class JobResumabilityTest extends TestCase
                 parent::__construct($artistQids, $chunkSize);
             }
 
-            protected function processArtistChunk(array $artistQids): void
+            public function handle(): void
             {
+                $checkpoint = IngestionCheckpoint::forKey('artists');
+                $qids = $checkpoint->getMeta('changed_artist_qids', []);
+
+                if (empty($qids)) {
+                    return;
+                }
+
+                $this->startJobRun();
+                $this->incrementProcessed(count($qids));
+
                 throw new RuntimeException('Simulated failure during processing');
             }
         };
