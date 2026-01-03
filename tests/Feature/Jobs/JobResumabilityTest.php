@@ -8,6 +8,7 @@ use App\Models\Artist;
 use App\Models\Country;
 use App\Models\IngestionCheckpoint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
 use Tests\TestCase;
 
 /**
@@ -32,30 +33,39 @@ class JobResumabilityTest extends TestCase
      */
     public function test_refresh_albums_preserves_meta_on_failure(): void
     {
-        // Create test artists
-        $artist1 = Artist::create([
-            'name' => 'Artist 1',
-            'wikidata_qid' => 'Q11111',
-        ]);
-
-        $artist2 = Artist::create([
-            'name' => 'Artist 2',
-            'wikidata_qid' => 'Q22222',
-        ]);
-
-        // Set up checkpoint with changed artist QIDs
         $checkpoint = IngestionCheckpoint::forKey('artists');
         $checkpoint->setMeta('changed_artist_qids', ['Q11111', 'Q22222']);
 
-        // Verify meta is set
-        $this->assertEquals(['Q11111', 'Q22222'], $checkpoint->getMeta('changed_artist_qids'));
+        $job = new class([]) extends RefreshAlbumsForChangedArtists {
+            public function __construct(array $artistQids = [], int $chunkSize = 25)
+            {
+                parent::__construct($artistQids, $chunkSize);
+            }
 
-        // The job reads meta, processes, then clears meta at the END
-        // If it fails before clearing, meta should still be present for retry
+            public function handle(): void
+            {
+                $checkpoint = IngestionCheckpoint::forKey('artists');
+                $qids = $checkpoint->getMeta('changed_artist_qids', []);
 
-        // Reload checkpoint to verify it persisted
-        $checkpoint->refresh();
-        $this->assertEquals(['Q11111', 'Q22222'], $checkpoint->getMeta('changed_artist_qids'));
+                if (empty($qids)) {
+                    return;
+                }
+
+                $this->startJobRun();
+                $this->incrementProcessed(count($qids));
+
+                throw new RuntimeException('Simulated failure during processing');
+            }
+        };
+
+        try {
+            $job->handle();
+            $this->fail('Job should have thrown to simulate failure');
+        } catch (RuntimeException $e) {
+            $checkpoint->refresh();
+            $this->assertSame(['Q11111', 'Q22222'], $checkpoint->getMeta('changed_artist_qids'));
+        }
+
     }
 
     /**

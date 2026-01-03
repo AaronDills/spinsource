@@ -10,7 +10,9 @@ use App\Models\Album;
 use App\Models\Artist;
 use App\Models\Country;
 use App\Models\Genre;
+use App\Models\DataSourceQuery;
 use App\Models\Track;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -47,8 +49,87 @@ class JobIdempotencyTest extends TestCase
      */
     public function test_wikidata_seed_genres_is_idempotent(): void
     {
-        // Skip if SPARQL loader isn't available in test
-        $this->markTestSkipped('Requires SPARQL query loader setup');
+        Carbon::setTestNow('2024-01-02 00:00:00');
+
+        $loaderStub = new class {
+            public function load(string $name): string
+            {
+                return 'SELECT ?genre WHERE { ?genre wdt:P31 wd:Q188451. }';
+            }
+        };
+
+        $wikidataStub = new class {
+            public array $bindings = [
+                [
+                    'genre' => ['value' => 'http://www.wikidata.org/entity/Q11399'],
+                    'genreLabel' => ['value' => 'Rock music'],
+                    'country' => ['value' => 'http://www.wikidata.org/entity/Q145'],
+                    'countryLabel' => ['value' => 'United Kingdom'],
+                ],
+            ];
+
+            public function querySparql(string $sparql): array
+            {
+                return ['results' => ['bindings' => $this->bindings]];
+            }
+
+            public function extractQid(?string $url): ?string
+            {
+                if (! $url) {
+                    return null;
+                }
+
+                $pos = strrpos($url, '/');
+
+                return $pos === false ? null : substr($url, $pos + 1);
+            }
+        };
+
+        $job = new class($loaderStub, $wikidataStub) extends WikidataSeedGenres {
+            protected $sparqlLoader;
+            protected $wikidata;
+
+            public function __construct($loader, $wikidata)
+            {
+                parent::__construct();
+                $this->sparqlLoader = $loader;
+                $this->wikidata = $wikidata;
+            }
+        };
+
+        $job->handle();
+
+        $this->assertDatabaseHas('genres', [
+            'wikidata_qid' => 'Q11399',
+            'name' => 'Rock music',
+        ]);
+        $this->assertDatabaseHas('countries', [
+            'wikidata_qid' => 'Q145',
+            'name' => 'United Kingdom',
+        ]);
+        $this->assertDatabaseHas('data_source_queries', [
+            'name' => 'genres/seed_genres',
+            'data_source' => 'wikidata',
+        ]);
+
+        // Change labels to confirm update rather than duplicate insert
+        $wikidataStub->bindings[0]['genreLabel']['value'] = 'Rock music (updated)';
+        $wikidataStub->bindings[0]['countryLabel']['value'] = 'UK';
+
+        $job->handle();
+
+        $this->assertDatabaseCount('genres', 1);
+        $this->assertDatabaseHas('genres', [
+            'wikidata_qid' => 'Q11399',
+            'name' => 'Rock music (updated)',
+        ]);
+        $this->assertDatabaseHas('countries', [
+            'wikidata_qid' => 'Q145',
+            'name' => 'UK',
+        ]);
+        $this->assertDatabaseCount('data_source_queries', 1);
+
+        Carbon::setTestNow();
     }
 
     /**
@@ -56,7 +137,8 @@ class JobIdempotencyTest extends TestCase
      */
     public function test_wikidata_enrich_album_covers_respects_existing_covers(): void
     {
-        // Create artist and album with existing cover
+        Carbon::setTestNow('2024-01-01 00:00:00');
+
         $artist = Artist::create([
             'name' => 'Test Artist',
             'wikidata_qid' => 'Q12345',
@@ -76,13 +158,77 @@ class JobIdempotencyTest extends TestCase
             'cover_image_commons' => null,
         ]);
 
-        // The job only updates null covers, so existing covers should be preserved
-        $this->assertEquals('existing_cover.jpg', $albumWithCover->cover_image_commons);
-        $this->assertNull($albumWithoutCover->cover_image_commons);
+        $wikidataStub = new class {
+            public array $bindings = [];
 
-        // Running twice shouldn't overwrite existing covers
+            public function __construct()
+            {
+                $this->bindings = [
+                    [
+                        'album' => ['value' => 'http://www.wikidata.org/entity/Q11111'],
+                        'coverImageCommons' => ['value' => 'cover_from_wikidata.jpg'],
+                    ],
+                    [
+                        'album' => ['value' => 'http://www.wikidata.org/entity/Q22222'],
+                        'coverImageCommons' => ['value' => 'new_cover.jpg'],
+                    ],
+                ];
+            }
+
+            public function querySparql(string $sparql, array $params = []): array
+            {
+                return ['results' => ['bindings' => $this->bindings]];
+            }
+
+            public function extractQid(?string $url): ?string
+            {
+                if (! $url) {
+                    return null;
+                }
+
+                $pos = strrpos($url, '/');
+
+                return $pos === false ? null : substr($url, $pos + 1);
+            }
+        };
+
+        $loaderStub = new class {
+            public function load(string $name): string
+            {
+                return 'SELECT ?album WHERE { ?album wdt:P31 wd:Q482994. }';
+            }
+        };
+
+        $job = new class(['Q11111', 'Q22222'], $loaderStub, $wikidataStub) extends WikidataEnrichAlbumCovers {
+            protected $sparqlLoader;
+            protected $wikidata;
+
+            public function __construct(array $albumQids, $loader, $wikidata)
+            {
+                parent::__construct($albumQids);
+                $this->sparqlLoader = $loader;
+                $this->wikidata = $wikidata;
+            }
+        };
+
+        $job->handle();
+
         $albumWithCover->refresh();
+        $albumWithoutCover->refresh();
+
         $this->assertEquals('existing_cover.jpg', $albumWithCover->cover_image_commons);
+        $this->assertEquals('new_cover.jpg', $albumWithoutCover->cover_image_commons);
+        $this->assertEquals('wikidata', $albumWithoutCover->source);
+        $this->assertEquals(
+            Carbon::now()->toDateTimeString(),
+            $albumWithoutCover->source_last_synced_at->toDateTimeString()
+        );
+        $this->assertDatabaseHas('data_source_queries', [
+            'name' => 'albums/enrich_album_covers',
+            'data_source' => 'wikidata',
+        ]);
+
+        Carbon::setTestNow();
     }
 
     /**

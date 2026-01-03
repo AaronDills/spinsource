@@ -41,15 +41,10 @@ class WikidataRecomputeSortNames extends WikidataJob
             'artistQids' => $this->artistQids,
         ]);
 
-        DataSourceQuery::create([
-            'source' => 'wikidata',
-            'query_type' => 'sparql',
-            'query_name' => 'artists/name_components_for_sort',
-            'query' => $sparql,
-            'response_meta' => [
-                'qids' => $this->artistQids,
-            ],
-        ]);
+        DataSourceQuery::updateOrCreate(
+            ['name' => 'artists/name_components_for_sort', 'data_source' => 'wikidata'],
+            ['query_type' => 'sparql', 'query' => $sparql, 'response_meta' => ['qids' => $this->artistQids]]
+        );
 
         $results = $response['results']['bindings'] ?? [];
 

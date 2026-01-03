@@ -25,12 +25,10 @@ class WikidataSeedGenres extends WikidataJob
 
         $response = $this->wikidata->querySparql($sparql);
 
-        DataSourceQuery::create([
-            'source' => 'wikidata',
-            'query_type' => 'sparql',
-            'query_name' => 'genres/seed_genres',
-            'query' => $sparql,
-        ]);
+        DataSourceQuery::updateOrCreate(
+            ['name' => 'genres/seed_genres', 'data_source' => 'wikidata'],
+            ['query_type' => 'sparql', 'query' => $sparql]
+        );
 
         $results = $response['results']['bindings'] ?? [];
         if (empty($results)) {

@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class DataSourceQuery extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'name',
         'data_source',
@@ -13,11 +16,13 @@ class DataSourceQuery extends Model
         'query',
         'description',
         'variables',
+        'response_meta',
         'is_active',
     ];
 
     protected $casts = [
         'variables' => 'array',
+        'response_meta' => 'array',
         'is_active' => 'boolean',
     ];
 

@@ -107,7 +107,7 @@ trait TracksJobMetrics
      */
     protected function incrementMetric(string $key, int $amount = 1): void
     {
-        $this->jobRun?->increment($key, $amount);
+        $this->jobRun?->incrementTotal($key, $amount);
     }
 
     /**
