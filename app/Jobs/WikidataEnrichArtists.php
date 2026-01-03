@@ -29,6 +29,13 @@ class WikidataEnrichArtists extends WikidataJob
             return;
         }
 
+        $this->withHeartbeat(function () {
+            $this->doHandle();
+        }, ['qids' => count($this->artistQids)]);
+    }
+
+    protected function doHandle(): void
+    {
         $this->logStart('Enrich artists', [
             'count' => count($this->artistQids),
         ]);

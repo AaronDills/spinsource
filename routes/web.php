@@ -29,6 +29,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/admin/logs/files', [\App\Http\Controllers\AdminLogController::class, 'files'])
         ->name('admin.logs.files');
+
+    Route::post('/admin/monitoring/clear-failed', [\App\Http\Controllers\AdminMonitoringController::class, 'clearFailedJobs'])
+        ->name('admin.monitoring.clear-failed');
 });
 
 Route::get('/search', [SearchController::class, 'search'])->name('search');

@@ -34,6 +34,13 @@ class WikidataSeedArtistIds extends WikidataJob implements ShouldBeUnique
 
     public function handle(): void
     {
+        $this->withHeartbeat(function () {
+            $this->doHandle();
+        }, ['afterOid' => $this->afterOid, 'pageSize' => $this->pageSize]);
+    }
+
+    protected function doHandle(): void
+    {
         Log::info('Wikidata artist ID page start', [
             'afterOid' => $this->afterOid,
             'pageSize' => $this->pageSize,

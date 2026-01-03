@@ -52,6 +52,27 @@ class AdminMonitoringController extends Controller
         return response()->json($metrics);
     }
 
+    /**
+     * Clear all failed jobs
+     */
+    public function clearFailedJobs(Request $request)
+    {
+        Gate::authorize('viewAdminDashboard');
+
+        if (!Schema::hasTable('failed_jobs')) {
+            return response()->json(['error' => 'Failed jobs table not found'], 404);
+        }
+
+        $count = DB::table('failed_jobs')->count();
+        DB::table('failed_jobs')->truncate();
+
+        return response()->json([
+            'success' => true,
+            'cleared' => $count,
+            'message' => "{$count} failed jobs cleared",
+        ]);
+    }
+
     protected function gatherQueueMetrics(): array
     {
         $queues = ['default', 'wikidata', 'musicbrainz'];
@@ -223,7 +244,7 @@ class AdminMonitoringController extends Controller
     protected function gatherHeartbeats(): array
     {
         return [
-            'recent' => JobHeartbeat::recent(15),
+            'runs' => JobHeartbeat::recentRuns(15),
             'summary' => JobHeartbeat::summary(60),
         ];
     }
@@ -288,14 +309,48 @@ class AdminMonitoringController extends Controller
         // Ingestion activity warning
         if ($metrics['ingestion_activity']['warning']) {
             $mins = $metrics['ingestion_activity']['minutes_since_activity'];
+            $duration = $this->formatDuration($mins);
             $warnings[] = [
                 'type' => 'ingestion',
                 'level' => 'warning',
-                'message' => "No ingestion activity for {$mins} minutes",
+                'message' => "No ingestion activity for {$duration}",
             ];
         }
 
         return $warnings;
+    }
+
+    /**
+     * Format minutes into human-readable duration
+     */
+    protected function formatDuration(int $minutes): string
+    {
+        if ($minutes < 60) {
+            return $minutes . ' minute' . ($minutes !== 1 ? 's' : '');
+        }
+
+        if ($minutes < 1440) { // Less than 24 hours
+            $hours = intdiv($minutes, 60);
+            $mins = $minutes % 60;
+
+            $result = $hours . ' hour' . ($hours !== 1 ? 's' : '');
+            if ($mins > 0) {
+                $result .= ' ' . $mins . ' min' . ($mins !== 1 ? 's' : '');
+            }
+            return $result;
+        }
+
+        // Days and hours
+        $days = intdiv($minutes, 1440);
+        $remainingMins = $minutes % 1440;
+        $hours = intdiv($remainingMins, 60);
+
+        $result = $days . ' day' . ($days !== 1 ? 's' : '');
+        if ($hours > 0) {
+            $result .= ' ' . $hours . ' hour' . ($hours !== 1 ? 's' : '');
+        }
+
+        return $result;
     }
 
     protected function summarizeException(?string $text): ?string
