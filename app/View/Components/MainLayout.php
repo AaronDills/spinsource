@@ -8,6 +8,7 @@ use Illuminate\View\View;
 class MainLayout extends Component
 {
     public function __construct(
+        public ?string $title = null,
         public bool $transparentHeader = false,
         public bool $showRecentReviews = true,
     ) {

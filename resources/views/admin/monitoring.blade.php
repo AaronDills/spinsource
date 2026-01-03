@@ -1,44 +1,30 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="csrf-token" content="{{ csrf_token() }}">
-        <title>Admin Monitoring - {{ config('app.name', 'Laravel') }}</title>
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-    </head>
-    <body class="bg-gray-900 min-h-screen font-sans antialiased" style="background-color: #111827 !important;">
-        <div class="container mx-auto p-4 max-w-7xl">
-            <!-- Header -->
-            <div class="flex items-center justify-between mb-6">
-                <div class="flex items-center gap-4">
-                    <a href="/" class="text-gray-400 hover:text-gray-200 transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                        </svg>
+<x-main-layout title="Admin Monitoring - {{ config('app.name', 'Spin Source') }}" :showRecentReviews="false">
+    <div class="container mx-auto p-4 max-w-7xl">
+        <!-- Admin Sub-header -->
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-bold text-gray-100">Admin Console</h1>
+                <nav class="flex gap-1 ml-4">
+                    <a href="{{ route('admin.monitoring') }}"
+                       class="px-4 py-2 text-sm font-medium rounded-lg bg-gray-700 text-white">
+                        Monitoring
                     </a>
-                    <h1 class="text-2xl font-bold text-gray-100">Admin Console</h1>
-                    <nav class="flex gap-1 ml-4">
-                        <a href="{{ route('admin.monitoring') }}"
-                           class="px-4 py-2 text-sm font-medium rounded-lg bg-gray-700 text-white">
-                            Monitoring
-                        </a>
-                        <a href="{{ route('admin.logs') }}"
-                           class="px-4 py-2 text-sm font-medium rounded-lg text-gray-400 hover:bg-gray-800 hover:text-gray-200 transition-colors">
-                            Logs
-                        </a>
-                    </nav>
-                </div>
-                <div class="flex items-center gap-4">
-                    <span id="last-updated" class="text-sm text-gray-500"></span>
-                    <button id="refresh-btn" onclick="fetchData(true)" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2">
-                        <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                        </svg>
-                        <span id="refresh-text">Refresh</span>
-                    </button>
-                </div>
+                    <a href="{{ route('admin.logs') }}"
+                       class="px-4 py-2 text-sm font-medium rounded-lg text-gray-400 hover:bg-gray-800 hover:text-gray-200 transition-colors">
+                        Logs
+                    </a>
+                </nav>
             </div>
+            <div class="flex items-center gap-4">
+                <span id="last-updated" class="text-sm text-gray-500"></span>
+                <button id="refresh-btn" onclick="fetchData(true)" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2">
+                    <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    <span id="refresh-text">Refresh</span>
+                </button>
+            </div>
+        </div>
 
             <!-- Warnings Banner -->
             <div id="warnings" class="mb-6 space-y-2"></div>
@@ -809,5 +795,5 @@ window.addEventListener('beforeunload', () => {
     if (refreshInterval) clearInterval(refreshInterval);
 });
 </script>
-    </body>
-</html>
+    </div>
+</x-main-layout>
