@@ -1,3 +1,88 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    :root {
+        color-scheme: dark;
+    }
+
+    body {
+        @apply bg-gray-950 text-gray-100;
+    }
+
+    input[type='text'],
+    input[type='email'],
+    input[type='password'],
+    input[type='number'],
+    textarea,
+    select {
+        @apply bg-gray-900 border border-gray-700 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500;
+    }
+}
+
+@layer components {
+    .card {
+        @apply bg-gray-900 border border-gray-800 shadow-lg sm:rounded-lg overflow-hidden;
+    }
+
+    .card-section {
+        @apply p-6;
+    }
+}
+
+@layer utilities {
+    .bg-white {
+        @apply bg-gray-900;
+    }
+
+    .bg-gray-100 {
+        @apply bg-gray-900;
+    }
+
+    .text-gray-900 {
+        @apply text-gray-100;
+    }
+
+    .text-gray-800 {
+        @apply text-gray-100;
+    }
+
+    .text-gray-700 {
+        @apply text-gray-200;
+    }
+
+    .text-gray-600 {
+        @apply text-gray-300;
+    }
+
+    .text-gray-500 {
+        @apply text-gray-400;
+    }
+
+    .border-gray-100,
+    .border-gray-200 {
+        @apply border-gray-800;
+    }
+
+    .border-gray-300 {
+        @apply border-gray-700;
+    }
+
+    .divide-gray-100,
+    .divide-gray-200 {
+        @apply divide-gray-800;
+    }
+
+    .divide-gray-300 {
+        @apply divide-gray-800;
+    }
+
+    .bg-gray-200 {
+        @apply bg-gray-800;
+    }
+
+    .bg-gray-50 {
+        @apply bg-gray-900;
+    }
+}

@@ -8,7 +8,7 @@
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             <!-- Navigation Tabs -->
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="card">
                 <div class="border-b border-gray-200">
                     <nav class="flex -mb-px">
                         <a href="{{ route('account') }}"
@@ -33,27 +33,27 @@
 
             <!-- Stats Overview -->
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 text-center">
+                <div class="card p-6 text-center">
                     <div class="text-3xl font-bold text-blue-600">{{ $stats['totalRatings'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">Total Reviews</div>
                 </div>
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 text-center">
+                <div class="card p-6 text-center">
                     <div class="text-3xl font-bold text-green-600">{{ $stats['averageRating'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">Average Rating</div>
                 </div>
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 text-center">
+                <div class="card p-6 text-center">
                     <div class="text-3xl font-bold text-purple-600">{{ $stats['uniqueArtists'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">Artists</div>
                 </div>
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 text-center">
+                <div class="card p-6 text-center">
                     <div class="text-3xl font-bold text-orange-600">{{ $stats['ratingsWithNotes'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">With Notes</div>
                 </div>
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 text-center">
+                <div class="card p-6 text-center">
                     <div class="text-3xl font-bold text-pink-600">{{ $stats['ratingsThisMonth'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">This Month</div>
                 </div>
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6 text-center">
+                <div class="card p-6 text-center">
                     <div class="text-3xl font-bold text-indigo-600">{{ $stats['ratingsThisYear'] }}</div>
                     <div class="text-sm text-gray-500 mt-1">This Year</div>
                 </div>
@@ -61,7 +61,7 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Rating Distribution -->
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="card">
                     <div class="p-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Rating Distribution</h3>
                         @php
@@ -71,7 +71,7 @@
                             @for($i = 10; $i >= 1; $i--)
                                 <div class="flex items-center gap-2">
                                     <span class="w-8 text-sm font-medium text-gray-600 text-right">{{ $i }}</span>
-                                    <div class="flex-1 bg-gray-100 rounded-full h-6">
+                                    <div class="flex-1 bg-gray-800 rounded-full h-6">
                                         <div class="h-6 rounded-full transition-all
                                             @if($i >= 8) bg-green-500
                                             @elseif($i >= 5) bg-yellow-500
@@ -88,7 +88,7 @@
                 </div>
 
                 <!-- Top Artists -->
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="card">
                     <div class="p-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Most Reviewed Artists</h3>
                         @if(count($topArtists) > 0)
@@ -126,7 +126,7 @@
 
             <!-- Yearly Stats -->
             @if(count($yearlyStats) > 0)
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="card">
                     <div class="p-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Activity by Year</h3>
                         <div class="overflow-x-auto">

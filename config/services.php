@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    'socialite' => [
+        'providers' => explode(',', (string) env('SOCIALITE_PROVIDERS', 'spotify')),
+    ],
+
+    'spotify' => [
+        'client_id' => env('SPOTIFY_CLIENT_ID'),
+        'client_secret' => env('SPOTIFY_CLIENT_SECRET'),
+        'redirect' => env('SPOTIFY_REDIRECT_URI'),
+        'scopes' => array_filter(explode(',', (string) env('SPOTIFY_SCOPE', 'user-read-email'))),
+    ],
+
 ];

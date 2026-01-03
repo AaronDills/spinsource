@@ -10,7 +10,7 @@
             <!-- Account Overview -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <!-- User Info Card -->
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="card">
                     <div class="p-6">
                         <div class="flex items-center gap-4">
                             <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
@@ -35,7 +35,7 @@
                 </div>
 
                 <!-- Quick Stats -->
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg md:col-span-2">
+                <div class="card md:col-span-2">
                     <div class="p-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Stats</h3>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -61,7 +61,7 @@
             </div>
 
             <!-- Navigation Tabs -->
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="card">
                 <div class="border-b border-gray-200">
                     <nav class="flex -mb-px">
                         <a href="{{ route('account') }}"
@@ -105,7 +105,7 @@
             </div>
 
             <!-- Recent Reviews -->
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+            <div class="card">
                 <div class="p-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold text-gray-900">Recent Reviews</h3>
