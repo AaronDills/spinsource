@@ -13,11 +13,6 @@ use Illuminate\Support\Carbon;
 
 class AdminMonitoringController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth');
-    }
-
     public function index(Request $request)
     {
         Gate::authorize('viewAdminDashboard');
