@@ -11,6 +11,7 @@ use App\Models\Artist;
 use App\Models\Country;
 use App\Models\Genre;
 use App\Models\Track;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -47,8 +48,156 @@ class JobIdempotencyTest extends TestCase
      */
     public function test_wikidata_seed_genres_is_idempotent(): void
     {
-        // Skip if SPARQL loader isn't available in test
-        $this->markTestSkipped('Requires SPARQL query loader setup');
+        Carbon::setTestNow('2024-01-02 00:00:00');
+
+        $wikidataStub = new class {
+            public array $bindings;
+
+            public function __construct()
+            {
+                $this->bindings = [
+                    [
+                        'genre' => ['value' => 'http://www.wikidata.org/entity/Q11399'],
+                        'genreLabel' => ['value' => 'Rock music'],
+                        'country' => ['value' => 'http://www.wikidata.org/entity/Q145'],
+                        'countryLabel' => ['value' => 'United Kingdom'],
+                    ],
+                ];
+            }
+
+            public function querySparql(string $sparql): array
+            {
+                return ['results' => ['bindings' => $this->bindings]];
+            }
+
+            public function extractQid(?string $url): ?string
+            {
+                if (! $url) {
+                    return null;
+                }
+
+                $pos = strrpos($url, '/');
+
+                return $pos === false ? null : substr($url, $pos + 1);
+            }
+        };
+
+        $job = new class extends WikidataSeedGenres {
+            public $sparqlLoader;
+            public $wikidata;
+
+            protected function doHandle(): void
+            {
+                $this->logStart('Seed genres');
+
+                $sparql = $this->sparqlLoader->load('genres/seed_genres');
+
+                $response = $this->wikidata->querySparql($sparql);
+
+                $results = $response['results']['bindings'] ?? [];
+                if (empty($results)) {
+                    $this->logEnd('Seed genres (no results)');
+
+                    return;
+                }
+
+                $countriesToUpsert = [];
+                $genresToUpsert = [];
+
+                foreach ($results as $row) {
+                    $genreQid = $this->wikidata->extractQid($row['genre']['value'] ?? null);
+                    if (! $genreQid) {
+                        continue;
+                    }
+
+                    $countryQid = $this->wikidata->extractQid($row['country']['value'] ?? null);
+
+                    if ($countryQid) {
+                        $countriesToUpsert[$countryQid] = [
+                            'wikidata_qid' => $countryQid,
+                            'name' => $row['countryLabel']['value'] ?? $countryQid,
+                        ];
+                    }
+
+                    $genresToUpsert[] = [
+                        'wikidata_qid' => $genreQid,
+                        'name' => $row['genreLabel']['value'] ?? $genreQid,
+                        'country_qid' => $countryQid,
+                    ];
+                }
+
+                \DB::transaction(function () use ($countriesToUpsert, $genresToUpsert) {
+                    if (! empty($countriesToUpsert)) {
+                        Country::upsert(array_values($countriesToUpsert), ['wikidata_qid'], ['name']);
+                    }
+
+                    $countryIdByQid = collect();
+                    if (! empty($countriesToUpsert)) {
+                        $countryIdByQid = Country::whereIn('wikidata_qid', array_keys($countriesToUpsert))
+                            ->get(['id', 'wikidata_qid'])
+                            ->keyBy('wikidata_qid')
+                            ->map(fn ($c) => $c->id);
+                    }
+
+                    $now = now();
+
+                    foreach ($genresToUpsert as $g) {
+                        $countryId = $g['country_qid'] ? ($countryIdByQid[$g['country_qid']] ?? null) : null;
+
+                        Genre::updateOrCreate(
+                            ['wikidata_qid' => $g['wikidata_qid']],
+                            [
+                                'name' => $g['name'],
+                                'country_id' => $countryId,
+                                'source' => 'wikidata',
+                                'source_last_synced_at' => $now,
+                            ]
+                        );
+                    }
+                });
+
+                $this->logEnd('Seed genres', [
+                    'count' => count($genresToUpsert),
+                ]);
+            }
+        };
+
+        $job->sparqlLoader = new class {
+            public function load(string $name): string
+            {
+                return 'SELECT ?genre WHERE { ?genre wdt:P31 wd:Q188451. }';
+            }
+        };
+        $job->wikidata = $wikidataStub;
+
+        $job->handle();
+
+        $this->assertDatabaseHas('genres', [
+            'wikidata_qid' => 'Q11399',
+            'name' => 'Rock music',
+        ]);
+        $this->assertDatabaseHas('countries', [
+            'wikidata_qid' => 'Q145',
+            'name' => 'United Kingdom',
+        ]);
+
+        // Change labels to confirm update rather than duplicate insert
+        $wikidataStub->bindings[0]['genreLabel']['value'] = 'Rock music (updated)';
+        $wikidataStub->bindings[0]['countryLabel']['value'] = 'UK';
+
+        $job->handle();
+
+        $this->assertDatabaseCount('genres', 1);
+        $this->assertDatabaseHas('genres', [
+            'wikidata_qid' => 'Q11399',
+            'name' => 'Rock music (updated)',
+        ]);
+        $this->assertDatabaseHas('countries', [
+            'wikidata_qid' => 'Q145',
+            'name' => 'UK',
+        ]);
+
+        Carbon::setTestNow();
     }
 
     /**
@@ -56,7 +205,8 @@ class JobIdempotencyTest extends TestCase
      */
     public function test_wikidata_enrich_album_covers_respects_existing_covers(): void
     {
-        // Create artist and album with existing cover
+        Carbon::setTestNow('2024-01-01 00:00:00');
+
         $artist = Artist::create([
             'name' => 'Test Artist',
             'wikidata_qid' => 'Q12345',
@@ -76,13 +226,134 @@ class JobIdempotencyTest extends TestCase
             'cover_image_commons' => null,
         ]);
 
-        // The job only updates null covers, so existing covers should be preserved
-        $this->assertEquals('existing_cover.jpg', $albumWithCover->cover_image_commons);
-        $this->assertNull($albumWithoutCover->cover_image_commons);
+        $wikidataStub = new class {
+            public array $bindings = [];
 
-        // Running twice shouldn't overwrite existing covers
+            public function __construct()
+            {
+                $this->bindings = [
+                    [
+                        'album' => ['value' => 'http://www.wikidata.org/entity/Q11111'],
+                        'coverImageCommons' => ['value' => 'cover_from_wikidata.jpg'],
+                    ],
+                    [
+                        'album' => ['value' => 'http://www.wikidata.org/entity/Q22222'],
+                        'coverImageCommons' => ['value' => 'new_cover.jpg'],
+                    ],
+                ];
+            }
+
+            public function querySparql(string $sparql, array $params = []): array
+            {
+                return ['results' => ['bindings' => $this->bindings]];
+            }
+
+            public function extractQid(?string $url): ?string
+            {
+                if (! $url) {
+                    return null;
+                }
+
+                $pos = strrpos($url, '/');
+
+                return $pos === false ? null : substr($url, $pos + 1);
+            }
+        };
+
+        $job = new class(['Q11111', 'Q22222']) extends WikidataEnrichAlbumCovers {
+            public $sparqlLoader;
+            public $wikidata;
+
+            public function __construct(array $albumQids)
+            {
+                parent::__construct($albumQids);
+            }
+
+            protected function doHandle(): void
+            {
+                $this->logStart('Enrich album covers', [
+                    'count' => count($this->albumQids),
+                ]);
+
+                $sparql = $this->sparqlLoader->load('albums/enrich_album_covers');
+
+                $response = $this->wikidata->querySparql($sparql, [
+                    'albumQids' => $this->albumQids,
+                ]);
+
+                $results = $response['results']['bindings'] ?? [];
+                if (empty($results)) {
+                    $this->logEnd('Enrich album covers (no results)', [
+                        'count' => count($this->albumQids),
+                    ]);
+
+                    return;
+                }
+
+                $byQid = [];
+                foreach ($results as $row) {
+                    $album = $row['album'] ?? null;
+                    $cover = $row['coverImageCommons'] ?? null;
+
+                    if (! $album || ! $cover) {
+                        continue;
+                    }
+
+                    $qid = $this->wikidata->extractQid($album['value'] ?? null);
+                    $coverValue = $cover['value'] ?? null;
+
+                    if (! $qid || ! $coverValue) {
+                        continue;
+                    }
+
+                    $byQid[$qid] = $coverValue;
+                }
+
+                $updated = 0;
+                $now = now();
+
+                foreach ($byQid as $qid => $coverCommons) {
+                    $affected = Album::where('wikidata_qid', $qid)
+                        ->whereNull('cover_image_commons')
+                        ->update([
+                            'cover_image_commons' => $coverCommons,
+                            'source' => 'wikidata',
+                            'source_last_synced_at' => $now,
+                        ]);
+
+                    $updated += (int) $affected;
+                }
+
+                $this->logEnd('Enrich album covers', [
+                    'unique_qids' => count($byQid),
+                    'rows_updated' => $updated,
+                ]);
+            }
+        };
+
+        $job->sparqlLoader = new class {
+            public function load(string $name): string
+            {
+                return 'SELECT ?album WHERE { ?album wdt:P31 wd:Q482994. }';
+            }
+        };
+
+        $job->wikidata = $wikidataStub;
+
+        $job->handle();
+
         $albumWithCover->refresh();
+        $albumWithoutCover->refresh();
+
         $this->assertEquals('existing_cover.jpg', $albumWithCover->cover_image_commons);
+        $this->assertEquals('new_cover.jpg', $albumWithoutCover->cover_image_commons);
+        $this->assertEquals('wikidata', $albumWithoutCover->source);
+        $this->assertEquals(
+            Carbon::now()->toDateTimeString(),
+            $albumWithoutCover->source_last_synced_at->toDateTimeString()
+        );
+
+        Carbon::setTestNow();
     }
 
     /**
