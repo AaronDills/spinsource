@@ -18,6 +18,7 @@ return new class extends Migration {
             $table->text('query');
             $table->text('description')->nullable();
             $table->json('variables')->nullable();
+            $table->json('response_meta')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 

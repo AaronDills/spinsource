@@ -16,11 +16,13 @@ class DataSourceQuery extends Model
         'query',
         'description',
         'variables',
+        'response_meta',
         'is_active',
     ];
 
     protected $casts = [
         'variables' => 'array',
+        'response_meta' => 'array',
         'is_active' => 'boolean',
     ];
 
