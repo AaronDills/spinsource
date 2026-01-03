@@ -6,6 +6,7 @@ use App\Http\Controllers\ArtistController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\AdminJobController;
 use Illuminate\Support\Facades\Route;
 
 // Diagnostic route - bypasses views entirely
@@ -34,6 +35,18 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/admin/monitoring/clear-failed', [\App\Http\Controllers\AdminMonitoringController::class, 'clearFailedJobs'])
         ->name('admin.monitoring.clear-failed');
+
+    Route::get('/admin/jobs', [AdminJobController::class, 'index'])
+        ->name('admin.jobs');
+
+    Route::get('/admin/jobs/data', [AdminJobController::class, 'data'])
+        ->name('admin.jobs.data');
+
+    Route::post('/admin/jobs/dispatch', [AdminJobController::class, 'dispatch'])
+        ->name('admin.jobs.dispatch');
+
+    Route::post('/admin/jobs/cancel', [AdminJobController::class, 'cancel'])
+        ->name('admin.jobs.cancel');
 });
 
 Route::get('/search', [SearchController::class, 'search'])->name('search');
