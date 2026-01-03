@@ -1,12 +1,5 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{{ config('app.name', 'Laravel') }}</title>
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-    </head>
-    <body class="bg-gray-100 dark:bg-gray-900 min-h-screen flex items-center justify-center">
+<x-main-layout :transparentHeader="false" :showRecentReviews="true">
+    <div class="flex items-center justify-center min-h-[calc(100vh-16rem)]">
         <div class="w-full max-w-xl px-4">
             <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-200 text-center mb-8">
                 {{ config('app.name', 'Spin Source') }}
@@ -79,7 +72,7 @@
 
                 <div
                     x-show="loading"
-                    class="absolute right-3 top-1/2 -translate-y-1/2"
+                    class="absolute right-16 top-1/2 -translate-y-1/2"
                 >
                     <svg class="animate-spin h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -92,6 +85,5 @@
                 Discover and collect the music you love
             </p>
         </div>
-
-    </body>
-</html>
+    </div>
+</x-main-layout>
