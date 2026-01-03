@@ -13,6 +13,10 @@
                        class="px-4 py-2 text-sm font-medium rounded-lg bg-gray-700 text-white">
                         Logs
                     </a>
+                    <a href="{{ route('admin.jobs') }}"
+                       class="px-4 py-2 text-sm font-medium rounded-lg text-gray-400 hover:bg-gray-800 hover:text-gray-200 transition-colors">
+                        Jobs
+                    </a>
                 </nav>
             </div>
             <div class="flex items-center gap-4">
