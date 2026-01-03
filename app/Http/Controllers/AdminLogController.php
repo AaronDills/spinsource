@@ -70,12 +70,12 @@ class AdminLogController extends Controller
     {
         Gate::authorize('viewAdminDashboard');
 
-        $file = $request->get('file', 'laravel.log');
-        $search = $request->get('search', '');
-        $level = $request->get('level', '');
-        $timeWindow = $request->get('time_window', ''); // e.g., '1h', '24h', '7d'
-        $limit = min((int) $request->get('limit', 100), self::MAX_ENTRIES);
-        $offset = (int) $request->get('offset', 0);
+        $file = $request->get('file') ?? 'laravel.log';
+        $search = $request->get('search') ?? '';
+        $level = $request->get('level') ?? '';
+        $timeWindow = $request->get('time_window') ?? ''; // e.g., '1h', '24h', '7d'
+        $limit = min((int) ($request->get('limit') ?? 100), self::MAX_ENTRIES);
+        $offset = (int) ($request->get('offset') ?? 0);
 
         // Sanitize filename to prevent directory traversal
         $file = basename($file);
