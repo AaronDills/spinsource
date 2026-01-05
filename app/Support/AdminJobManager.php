@@ -12,6 +12,7 @@ use App\Jobs\WikidataSeedAlbums;
 use App\Jobs\WikidataSeedArtistIds;
 use App\Jobs\WikidataSeedGenres;
 use App\Models\JobRun;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
@@ -244,6 +245,141 @@ class AdminJobManager
         $definition['running'] = $this->runningRuns($jobName);
 
         return $definition;
+    }
+
+    public function failedJobsSummary(): array
+    {
+        if (! Schema::hasTable('failed_jobs')) {
+            return [
+                'exists' => false,
+                'count' => 0,
+                'groups' => [],
+            ];
+        }
+
+        $rows = DB::table('failed_jobs')
+            ->orderByDesc('failed_at')
+            ->get(['id', 'connection', 'queue', 'payload', 'exception', 'failed_at']);
+
+        if ($rows->isEmpty()) {
+            return [
+                'exists' => true,
+                'count' => 0,
+                'groups' => [],
+            ];
+        }
+
+        $groups = [];
+        foreach ($rows as $row) {
+            $normalized = $this->normalizeException($row->exception);
+            $signature = sha1($normalized);
+
+            if (! isset($groups[$signature])) {
+                $groups[$signature] = [
+                    'signature' => $signature,
+                    'message' => $normalized,
+                    'count' => 0,
+                    'queues' => [],
+                    'example_id' => $row->id,
+                    'latest_failed_at' => $row->failed_at,
+                ];
+            }
+
+            $groups[$signature]['count']++;
+            $groups[$signature]['queues'][$row->queue] = ($groups[$signature]['queues'][$row->queue] ?? 0) + 1;
+            $latest = Carbon::parse($groups[$signature]['latest_failed_at']);
+            $current = Carbon::parse($row->failed_at);
+            if ($current->gt($latest)) {
+                $groups[$signature]['latest_failed_at'] = $row->failed_at;
+                $groups[$signature]['example_id'] = $row->id;
+            }
+        }
+
+        $groups = collect($groups)
+            ->sortByDesc(fn ($g) => [$g['count'], $g['latest_failed_at']])
+            ->map(function ($g) {
+                $g['queues'] = collect($g['queues'])
+                    ->map(fn ($count, $queue) => ['queue' => $queue, 'count' => $count])
+                    ->values()
+                    ->toArray();
+                $g['latest_failed_at_human'] = Carbon::parse($g['latest_failed_at'])->diffForHumans();
+
+                return $g;
+            })
+            ->values()
+            ->toArray();
+
+        return [
+            'exists' => true,
+            'count' => $rows->count(),
+            'groups' => $groups,
+        ];
+    }
+
+    public function clearFailedJobs(?string $signature = null): array
+    {
+        if (! Schema::hasTable('failed_jobs')) {
+            return [
+                'ok' => false,
+                'message' => 'Failed jobs table not found',
+            ];
+        }
+
+        $query = DB::table('failed_jobs');
+        if ($signature) {
+            $ids = $this->failedJobIdsForSignature($signature);
+            if (empty($ids)) {
+                return [
+                    'ok' => false,
+                    'message' => 'No failed jobs found for this error',
+                ];
+            }
+            $query->whereIn('id', $ids);
+        }
+
+        $count = $query->count();
+        $query->delete();
+
+        return [
+            'ok' => true,
+            'cleared' => $count,
+            'message' => $signature
+                ? "{$count} failed jobs cleared for this error"
+                : "{$count} failed jobs cleared",
+        ];
+    }
+
+    public function retryFailedJobs(?string $signature = null): array
+    {
+        if (! Schema::hasTable('failed_jobs')) {
+            return [
+                'ok' => false,
+                'message' => 'Failed jobs table not found',
+            ];
+        }
+
+        $ids = $signature ? $this->failedJobIdsForSignature($signature) : $this->allFailedJobIds();
+        if (empty($ids)) {
+            return [
+                'ok' => false,
+                'message' => 'No failed jobs to retry',
+            ];
+        }
+
+        try {
+            \Artisan::call('queue:retry', ['id' => implode(',', $ids)]);
+        } catch (\Throwable $e) {
+            return [
+                'ok' => false,
+                'message' => 'Retry failed: '.$e->getMessage(),
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'retried' => count($ids),
+            'message' => count($ids).' failed jobs dispatched for retry',
+        ];
     }
 
     /**
@@ -652,5 +788,38 @@ class AdminJobManager
         }
 
         return str_contains($payload, $jobClass);
+    }
+
+    protected function normalizeException(?string $exception): string
+    {
+        if (! $exception) {
+            return 'Unknown exception';
+        }
+
+        $lines = preg_split('/\\r?\\n/', trim($exception));
+        $first = $lines[0] ?? 'Unknown exception';
+
+        return mb_substr($first, 0, 400);
+    }
+
+    protected function failedJobIdsForSignature(string $signature): array
+    {
+        $rows = DB::table('failed_jobs')
+            ->get(['id', 'exception']);
+
+        $ids = [];
+        foreach ($rows as $row) {
+            $normalized = $this->normalizeException($row->exception);
+            if (sha1($normalized) === $signature) {
+                $ids[] = $row->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    protected function allFailedJobIds(): array
+    {
+        return DB::table('failed_jobs')->pluck('id')->all();
     }
 }
