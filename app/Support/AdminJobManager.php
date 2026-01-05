@@ -273,6 +273,7 @@ class AdminJobManager
         foreach ($rows as $row) {
             $normalized = $this->normalizeException($row->exception);
             $signature = sha1($normalized);
+            $failedAt = $row->failed_at ?? Carbon::now();
 
             if (! isset($groups[$signature])) {
                 $groups[$signature] = [
@@ -281,16 +282,16 @@ class AdminJobManager
                     'count' => 0,
                     'queues' => [],
                     'example_id' => $row->id,
-                    'latest_failed_at' => $row->failed_at,
+                    'latest_failed_at' => $failedAt,
                 ];
             }
 
             $groups[$signature]['count']++;
             $groups[$signature]['queues'][$row->queue] = ($groups[$signature]['queues'][$row->queue] ?? 0) + 1;
             $latest = Carbon::parse($groups[$signature]['latest_failed_at']);
-            $current = Carbon::parse($row->failed_at);
+            $current = Carbon::parse($failedAt);
             if ($current->gt($latest)) {
-                $groups[$signature]['latest_failed_at'] = $row->failed_at;
+                $groups[$signature]['latest_failed_at'] = $failedAt;
                 $groups[$signature]['example_id'] = $row->id;
             }
         }

@@ -23,12 +23,40 @@ class AdminJobController extends Controller
     {
         Gate::authorize('viewAdminDashboard');
 
+        $jobs = [
+            'data' => [],
+            'error' => null,
+        ];
+
+        $failedJobs = [
+            'exists' => false,
+            'count' => 0,
+            'groups' => [],
+            'error' => null,
+        ];
+
+        try {
+            $jobs['data'] = $this->jobs->jobsWithStatus();
+        } catch (\Throwable $e) {
+            report($e);
+            $jobs['error'] = 'Failed to load jobs';
+        }
+
+        try {
+            $summary = $this->jobs->failedJobsSummary();
+            $failedJobs = array_merge($summary, ['error' => null]);
+        } catch (\Throwable $e) {
+            report($e);
+            $failedJobs['error'] = 'Failed to load failed jobs';
+        }
+
         return response()->json([
             'generated_at' => now()->toIso8601String(),
             'queue_connection' => $this->jobs->queueConnection(),
             'queue_driver' => $this->jobs->queueDriver(),
-            'jobs' => $this->jobs->jobsWithStatus(),
-            'failed_jobs' => $this->jobs->failedJobsSummary(),
+            'jobs' => $jobs['data'],
+            'jobs_error' => $jobs['error'],
+            'failed_jobs' => $failedJobs,
         ]);
     }
 

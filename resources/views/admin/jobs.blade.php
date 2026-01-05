@@ -141,11 +141,21 @@ function switchTab(tab) {
 }
 
 function renderJobs(payload) {
-    const { jobs = [], generated_at, queue_connection, queue_driver } = payload;
+    const { jobs = [], generated_at, queue_connection, queue_driver, jobs_error } = payload;
     document.getElementById('last-updated').textContent = generated_at
         ? `Updated: ${new Date(generated_at).toLocaleTimeString()}`
         : '';
     document.getElementById('queue-meta').textContent = `Queue: ${queue_connection} (${queue_driver})`;
+
+    if (jobs_error) {
+        document.getElementById('jobs-container').innerHTML = `<div class="p-6 rounded-lg border border-red-700 bg-red-900/30 text-red-100">
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>${jobs_error}</span>
+            </div>
+        </div>`;
+        return;
+    }
 
     if (!jobs.length) {
         document.getElementById('jobs-container').innerHTML = '<div class="p-6 rounded-lg border border-gray-700 bg-gray-800 text-gray-400">No jobs available.</div>';
@@ -351,6 +361,16 @@ async function cancelJob(jobKey) {
 
 function renderFailedJobs(failed) {
     const container = document.getElementById('failed-container');
+
+    if (failed?.error) {
+        container.innerHTML = `<div class="p-6 rounded-lg border border-red-700 bg-red-900/30 text-red-100">
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>${failed.error}</span>
+            </div>
+        </div>`;
+        return;
+    }
 
     if (!failed || !failed.exists) {
         container.innerHTML = '<div class="p-6 rounded-lg border border-gray-700 bg-gray-800 text-yellow-300">Failed jobs table not available.</div>';
