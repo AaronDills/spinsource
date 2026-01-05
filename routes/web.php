@@ -47,12 +47,6 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/admin/jobs/cancel', [AdminJobController::class, 'cancel'])
         ->name('admin.jobs.cancel');
-
-    Route::post('/admin/jobs/failed/clear', [AdminJobController::class, 'clearFailed'])
-        ->name('admin.jobs.failed.clear');
-
-    Route::post('/admin/jobs/failed/retry', [AdminJobController::class, 'retryFailed'])
-        ->name('admin.jobs.failed.retry');
 });
 
 Route::get('/search', [SearchController::class, 'search'])->name('search');
