@@ -32,6 +32,15 @@
 
         <div id="alert" class="hidden mb-4 p-3 rounded-lg border bg-gray-800/70"></div>
 
+        <div class="mb-4 flex gap-2">
+            <button onclick="switchTab('jobs')" id="tab-jobs" class="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white border border-blue-700">
+                Jobs
+            </button>
+            <button onclick="switchTab('failed')" id="tab-failed" class="px-3 py-1.5 text-sm rounded-lg bg-gray-800 text-gray-200 border border-gray-700 hover:bg-gray-700">
+                Failed Jobs
+            </button>
+        </div>
+
         <div id="jobs-container" class="grid grid-cols-1 gap-4">
             <div class="p-6 rounded-lg border border-gray-700 bg-gray-800">
                 <div class="animate-pulse space-y-2">
@@ -41,14 +50,27 @@
                 </div>
             </div>
         </div>
+
+        <div id="failed-container" class="hidden grid grid-cols-1 gap-4">
+            <div class="p-6 rounded-lg border border-gray-700 bg-gray-800">
+                <div class="animate-pulse space-y-2">
+                    <div class="h-4 bg-gray-700 rounded w-3/4"></div>
+                    <div class="h-4 bg-gray-700 rounded w-1/2"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
 <script>
 const DATA_URL = '{{ route('admin.jobs.data') }}';
 const DISPATCH_URL = '{{ route('admin.jobs.dispatch') }}';
 const CANCEL_URL = '{{ route('admin.jobs.cancel') }}';
+const CLEAR_FAILED_URL = '{{ route('admin.jobs.failed.clear') }}';
+const RETRY_FAILED_URL = '{{ route('admin.jobs.failed.retry') }}';
 
 let refreshInterval;
+let currentTab = 'jobs';
+let lastPayload = null;
 
 async function fetchJobs(manual = false) {
     const btn = document.getElementById('refresh-btn');
@@ -66,7 +88,8 @@ async function fetchJobs(manual = false) {
         const res = await fetch(DATA_URL, { credentials: 'same-origin' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        renderJobs(data);
+        lastPayload = data;
+        renderActiveView();
 
         if (manual && btn) {
             text.textContent = 'Updated';
@@ -89,12 +112,50 @@ async function fetchJobs(manual = false) {
     }
 }
 
+function renderActiveView() {
+    if (!lastPayload) return;
+
+    if (currentTab === 'jobs') {
+        document.getElementById('jobs-container').classList.remove('hidden');
+        document.getElementById('failed-container').classList.add('hidden');
+        document.getElementById('tab-jobs').classList.add('bg-blue-600', 'text-white', 'border-blue-700');
+        document.getElementById('tab-jobs').classList.remove('bg-gray-800', 'text-gray-200', 'border-gray-700');
+        document.getElementById('tab-failed').classList.add('bg-gray-800', 'text-gray-200', 'border-gray-700');
+        document.getElementById('tab-failed').classList.remove('bg-blue-600', 'text-white', 'border-blue-700');
+        renderJobs(lastPayload);
+    } else {
+        document.getElementById('failed-container').classList.remove('hidden');
+        document.getElementById('jobs-container').classList.add('hidden');
+        document.getElementById('tab-failed').classList.add('bg-blue-600', 'text-white', 'border-blue-700');
+        document.getElementById('tab-failed').classList.remove('bg-gray-800', 'text-gray-200', 'border-gray-700');
+        document.getElementById('tab-jobs').classList.add('bg-gray-800', 'text-gray-200', 'border-gray-700');
+        document.getElementById('tab-jobs').classList.remove('bg-blue-600', 'text-white', 'border-blue-700');
+        renderFailedJobs(lastPayload.failed_jobs);
+    }
+}
+
+function switchTab(tab) {
+    if (tab === currentTab) return;
+    currentTab = tab;
+    renderActiveView();
+}
+
 function renderJobs(payload) {
-    const { jobs = [], generated_at, queue_connection, queue_driver } = payload;
+    const { jobs = [], generated_at, queue_connection, queue_driver, jobs_error } = payload;
     document.getElementById('last-updated').textContent = generated_at
         ? `Updated: ${new Date(generated_at).toLocaleTimeString()}`
         : '';
     document.getElementById('queue-meta').textContent = `Queue: ${queue_connection} (${queue_driver})`;
+
+    if (jobs_error) {
+        document.getElementById('jobs-container').innerHTML = `<div class="p-6 rounded-lg border border-red-700 bg-red-900/30 text-red-100">
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>${jobs_error}</span>
+            </div>
+        </div>`;
+        return;
+    }
 
     if (!jobs.length) {
         document.getElementById('jobs-container').innerHTML = '<div class="p-6 rounded-lg border border-gray-700 bg-gray-800 text-gray-400">No jobs available.</div>';
@@ -295,6 +356,115 @@ async function cancelJob(jobKey) {
             btn.classList.remove('opacity-75');
             btn.textContent = 'Cancel queued/running';
         }
+    }
+}
+
+function renderFailedJobs(failed) {
+    const container = document.getElementById('failed-container');
+
+    if (failed?.error) {
+        container.innerHTML = `<div class="p-6 rounded-lg border border-red-700 bg-red-900/30 text-red-100">
+            <div class="flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>${failed.error}</span>
+            </div>
+        </div>`;
+        return;
+    }
+
+    if (!failed || !failed.exists) {
+        container.innerHTML = '<div class="p-6 rounded-lg border border-gray-700 bg-gray-800 text-yellow-300">Failed jobs table not available.</div>';
+        return;
+    }
+
+    if (failed.count === 0 || !failed.groups || failed.groups.length === 0) {
+        container.innerHTML = '<div class="p-6 rounded-lg border border-gray-700 bg-gray-800 text-green-400 flex items-center gap-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>No failed jobs 🎉</div>';
+        return;
+    }
+
+    const groupsHtml = failed.groups.map(group => {
+        const queueBadges = group.queues.map(q => `<span class="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-200">${q.queue}: ${q.count}</span>`).join(' ');
+        return `<div class="p-5 rounded-lg border border-gray-700 bg-gray-800 shadow space-y-3">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <div class="text-sm text-red-300">Latest: ${group.latest_failed_at_human}</div>
+                    <div class="text-lg font-semibold text-gray-100 mt-1">${group.message}</div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-1 rounded text-xs bg-red-900 text-red-200 border border-red-700">${group.count} failure${group.count === 1 ? '' : 's'}</span>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">${queueBadges || '<span class="text-sm text-gray-500">Unknown queue</span>'}</div>
+            <div class="flex flex-wrap gap-2">
+                <button onclick="retryFailed('${group.signature}')" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors">Retry group</button>
+                <button onclick="clearFailed('${group.signature}')" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors">Clear group</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+            <div class="text-sm text-gray-400">${failed.count} total failed jobs</div>
+            <div class="flex gap-2">
+                <button onclick="retryFailed()" class="px-3 py-1.5 text-sm bg-blue-700 hover:bg-blue-800 text-white rounded transition-colors">Retry all</button>
+                <button onclick="clearFailed()" class="px-3 py-1.5 text-sm bg-red-700 hover:bg-red-800 text-white rounded transition-colors">Clear all</button>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-4">${groupsHtml}</div>
+    `;
+}
+
+async function clearFailed(signature = null) {
+    if (!confirm(signature ? 'Clear failed jobs for this error?' : 'Clear ALL failed jobs? This cannot be undone.')) {
+        return;
+    }
+
+    const token = document.querySelector('meta[name=\"csrf-token\"]').content;
+    try {
+        const res = await fetch(CLEAR_FAILED_URL, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': token,
+            },
+            body: JSON.stringify({ signature }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || `HTTP ${res.status}`);
+        }
+
+        showAlert(data.message || 'Failed jobs cleared', 'success');
+        fetchJobs();
+    } catch (err) {
+        showAlert(`Clear failed jobs failed: ${err.message}`, 'error');
+    }
+}
+
+async function retryFailed(signature = null) {
+    const token = document.querySelector('meta[name=\"csrf-token\"]').content;
+    try {
+        const res = await fetch(RETRY_FAILED_URL, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': token,
+            },
+            body: JSON.stringify({ signature }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.message || `HTTP ${res.status}`);
+        }
+
+        showAlert(data.message || 'Failed jobs retried', 'success');
+        fetchJobs();
+    } catch (err) {
+        showAlert(`Retry failed jobs failed: ${err.message}`, 'error');
     }
 }
 
