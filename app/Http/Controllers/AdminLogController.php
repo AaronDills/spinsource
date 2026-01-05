@@ -77,16 +77,27 @@ class AdminLogController extends Controller
         $limit = min((int) ($request->get('limit') ?? 100), self::MAX_ENTRIES);
         $offset = (int) ($request->get('offset') ?? 0);
 
-        // Sanitize filename to prevent directory traversal
+        // Sanitize filename to prevent directory traversal and fall back to the latest log when empty
         $file = basename($file);
+        if (empty($file)) {
+            $file = $this->getLatestLogFile();
+        }
+
         $filePath = storage_path('logs/' . $file);
 
         if (!File::exists($filePath)) {
-            return response()->json([
-                'error' => 'Log file not found',
-                'entries' => [],
-                'total' => 0,
-            ], 404);
+            $latestLogFile = $this->getLatestLogFile();
+
+            if ($latestLogFile !== null) {
+                $file = $latestLogFile;
+                $filePath = storage_path('logs/' . $file);
+            } else {
+                return response()->json([
+                    'error' => 'Log file not found',
+                    'entries' => [],
+                    'total' => 0,
+                ], 404);
+            }
         }
 
         // Check file size
@@ -281,5 +292,29 @@ class AdminLogController extends Controller
             $i++;
         }
         return round($bytes, 2) . ' ' . $units[$i];
+    }
+
+    /**
+     * Get the most recently modified log filename or null if none exist
+     */
+    private function getLatestLogFile(): ?string
+    {
+        $logPath = storage_path('logs');
+
+        if (! File::isDirectory($logPath)) {
+            return null;
+        }
+
+        $logFiles = File::glob($logPath . '/*.log');
+
+        if (empty($logFiles)) {
+            return null;
+        }
+
+        usort($logFiles, function ($a, $b) {
+            return File::lastModified($b) <=> File::lastModified($a);
+        });
+
+        return basename($logFiles[0]);
     }
 }
