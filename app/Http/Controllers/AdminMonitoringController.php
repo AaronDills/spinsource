@@ -89,61 +89,132 @@ class AdminMonitoringController extends Controller
 
     protected function gatherQueueMetrics(): array
     {
+        $defaultConnection = config('queue.default');
+        [$resolvedConnection, $driver] = $this->resolveQueueConnection($defaultConnection);
+
         $queues = ['default', 'wikidata', 'musicbrainz'];
+        $configuredQueue = config("queue.connections.{$resolvedConnection}.queue");
+        if ($configuredQueue) {
+            $queues[] = $configuredQueue;
+        }
 
         $result = [
-            'connection' => config('queue.default'),
-            'driver' => config('queue.connections.'.config('queue.default').'.driver', 'unknown'),
-            'redis_available' => false,
+            'connection' => $defaultConnection,
+            'resolved_connection' => $resolvedConnection,
+            'driver' => $driver,
+            'redis_available' => $driver === 'redis' ? false : null,
+            'driver_available' => true,
+            'source' => $driver,
             'queues' => [],
         ];
 
-        try {
-            $redis = Redis::connection();
-            $redis->ping();
-            $result['redis_available'] = true;
-
-            // Discover queues by scanning keys if supported
-            $keys = [];
+        if ($driver === 'redis') {
             try {
-                if (method_exists($redis, 'keys')) {
-                    $keys = $redis->keys('queues:*') ?: [];
+                $redisConnection = config("queue.connections.{$resolvedConnection}.connection", 'default');
+                $redis = Redis::connection($redisConnection);
+                $redis->ping();
+                $result['redis_available'] = true;
+
+                // Discover queues by scanning keys if supported
+                $keys = [];
+                try {
+                    if (method_exists($redis, 'keys')) {
+                        $keys = $redis->keys('queues:*') ?: [];
+                    }
+                } catch (\Throwable $e) {
+                    Log::debug('Redis keys scan failed for queue discovery', ['err' => $e->getMessage()]);
                 }
+
+                foreach ($keys as $k) {
+                    $name = (string) $k;
+                    $parts = explode(':', $name);
+                    $q = end($parts);
+                    if ($q && ! str_contains($q, ':notify') && ! str_contains($q, ':reserved')) {
+                        $queues[] = $q;
+                    }
+                }
+
+                $queues = array_values(array_unique($queues));
+
+                foreach ($queues as $q) {
+                    $key = "queues:{$q}";
+                    try {
+                        $len = $redis->llen($key);
+                    } catch (\Throwable $e) {
+                        $len = null;
+                    }
+
+                    $depth = is_int($len) ? $len : 0;
+                    $result['queues'][$q] = [
+                        'depth' => $depth,
+                        'warning' => $depth > self::WARNING_QUEUE_DEPTH,
+                    ];
+                }
+
             } catch (\Throwable $e) {
-                Log::debug('Redis keys scan failed for queue discovery', ['err' => $e->getMessage()]);
+                $result['driver_available'] = false;
+                Log::warning('Redis not available for queue metrics', ['err' => $e->getMessage()]);
             }
 
-            foreach ($keys as $k) {
-                $name = (string) $k;
-                $parts = explode(':', $name);
-                $q = end($parts);
-                if ($q && ! str_contains($q, ':notify') && ! str_contains($q, ':reserved')) {
-                    $queues[] = $q;
-                }
+            return $result;
+        }
+
+        if ($driver === 'database') {
+            $queueTable = config("queue.connections.{$resolvedConnection}.table", 'jobs');
+            $queueDbConnection = config("queue.connections.{$resolvedConnection}.connection");
+
+            $schema = $queueDbConnection
+                ? Schema::connection($queueDbConnection)
+                : Schema::connection(config('database.default'));
+
+            if (! $schema->hasTable($queueTable)) {
+                $result['driver_available'] = false;
+
+                return $result;
             }
 
-            $queues = array_values(array_unique($queues));
+            $db = $queueDbConnection ? DB::connection($queueDbConnection) : DB::connection();
+
+            $counts = $db->table($queueTable)
+                ->select('queue', DB::raw('count(*) as pending'))
+                ->whereNull('reserved_at')
+                ->groupBy('queue')
+                ->pluck('pending', 'queue')
+                ->toArray();
+
+            $queues = array_values(array_unique(array_merge($queues, array_keys($counts))));
 
             foreach ($queues as $q) {
-                $key = "queues:{$q}";
-                try {
-                    $len = $redis->llen($key);
-                } catch (\Throwable $e) {
-                    $len = null;
-                }
-
-                $depth = is_int($len) ? $len : 0;
+                $depth = (int) ($counts[$q] ?? 0);
                 $result['queues'][$q] = [
                     'depth' => $depth,
                     'warning' => $depth > self::WARNING_QUEUE_DEPTH,
                 ];
             }
 
-        } catch (\Throwable $e) {
-            Log::warning('Redis not available for queue metrics', ['err' => $e->getMessage()]);
+            return $result;
         }
 
+        $result['driver_available'] = false;
+
         return $result;
+    }
+
+    protected function resolveQueueConnection(string $defaultConnection): array
+    {
+        $driver = config("queue.connections.{$defaultConnection}.driver", 'unknown');
+
+        if ($driver === 'failover') {
+            $fallbacks = config("queue.connections.{$defaultConnection}.connections", []);
+            foreach ($fallbacks as $connection) {
+                $fallbackDriver = config("queue.connections.{$connection}.driver");
+                if ($fallbackDriver) {
+                    return [$connection, $fallbackDriver];
+                }
+            }
+        }
+
+        return [$defaultConnection, $driver];
     }
 
     protected function gatherTableCounts(): array
