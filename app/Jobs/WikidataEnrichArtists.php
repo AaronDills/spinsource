@@ -155,11 +155,11 @@ class WikidataEnrichArtists extends WikidataJob
 
             // Build artist links array
             foreach ([
-                ArtistLinkType::Twitter->value => $row['twitter']['value'] ?? null,
-                ArtistLinkType::Instagram->value => $row['instagram']['value'] ?? null,
-                ArtistLinkType::Facebook->value => $row['facebook']['value'] ?? null,
-                ArtistLinkType::YouTube->value => $row['youtubeChannel']['value'] ?? null,
-                ArtistLinkType::OfficialWebsite->value => $artistUpdates[$artistQid]['officialWebsite'] ?? null,
+                ArtistLinkType::TWITTER->value => $row['twitter']['value'] ?? null,
+                ArtistLinkType::INSTAGRAM->value => $row['instagram']['value'] ?? null,
+                ArtistLinkType::FACEBOOK->value => $row['facebook']['value'] ?? null,
+                ArtistLinkType::YOUTUBE->value => $row['youtubeChannel']['value'] ?? null,
+                ArtistLinkType::WEBSITE->value => $artistUpdates[$artistQid]['officialWebsite'] ?? null,
             ] as $type => $url) {
                 if ($url) {
                     $artistLinks[] = [
