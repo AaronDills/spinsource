@@ -493,8 +493,31 @@ function renderIngestion(activity) {
         } else {
             html += '<div class="space-y-1 max-h-32 overflow-y-auto">';
             items.forEach(item => {
+                const label = item.label || item.job || item.name || item.query || 'Activity';
+                const details = [];
+
+                if (item.metric) {
+                    details.push(item.metric);
+                }
+
+                if (item.context) {
+                    const ctxParts = [];
+                    Object.entries(item.context).forEach(([key, value]) => {
+                        if (value === null || typeof value === 'undefined') {
+                            return;
+                        }
+                        const formatted = typeof value === 'object' ? JSON.stringify(value) : value;
+                        ctxParts.push(`${key}: ${formatted}`);
+                    });
+                    if (ctxParts.length > 0) {
+                        details.push(ctxParts.join(' · '));
+                    }
+                }
+
+                const detailText = details.length > 0 ? `<span class="text-gray-500 ml-2 truncate">(${details.join(' | ')})</span>` : '';
+
                 html += `<div class="text-xs flex justify-between">
-                    <span class="text-gray-400 truncate mr-2">${item.name || item.query || 'Query'}</span>
+                    <span class="text-gray-400 truncate mr-2">${label}${detailText}</span>
                     <span class="text-gray-600 flex-shrink-0">${item.at_human}</span>
                 </div>`;
             });

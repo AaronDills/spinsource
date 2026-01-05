@@ -285,6 +285,8 @@ class AdminMonitoringController extends Controller
 
     protected function gatherIngestionActivity(): array
     {
+        $sources = ['wikidata', 'musicbrainz'];
+
         $out = [
             'wikidata' => [],
             'musicbrainz' => [],
@@ -293,38 +295,139 @@ class AdminMonitoringController extends Controller
             'warning' => false,
         ];
 
-        if (Schema::hasTable('data_source_queries')) {
-            $rows = DB::table('data_source_queries')
-                ->whereIn('data_source', ['wikidata', 'musicbrainz'])
+        $lastActivity = null;
+        $hasActivity = array_fill_keys($sources, false);
+
+        if (Schema::hasTable('ingestion_events')) {
+            $events = DB::table('ingestion_events')
+                ->whereIn('source', $sources)
                 ->orderByDesc('created_at')
-                ->limit(20)
-                ->get(['id', 'data_source', 'name', 'query', 'created_at']);
+                ->limit(30)
+                ->get(['id', 'source', 'name', 'context', 'created_at']);
 
-            $grouped = $rows->groupBy('data_source');
+            $grouped = $events->groupBy('source');
 
-            foreach (['wikidata', 'musicbrainz'] as $source) {
+            foreach ($sources as $source) {
                 $out[$source] = isset($grouped[$source])
-                    ? $grouped[$source]->take(10)->map(fn ($r) => [
-                        'id' => $r->id,
-                        'name' => $r->name,
-                        'query' => $r->query,
-                        'at' => $r->created_at,
-                        'at_human' => Carbon::parse($r->created_at)->diffForHumans(),
-                    ])->values()->toArray()
+                    ? $grouped[$source]
+                        ->take(10)
+                        ->map(fn ($r) => $this->formatIngestionEntry(
+                            source: $source,
+                            label: $r->name,
+                            metric: null,
+                            context: $r->context,
+                            timestamp: $r->created_at,
+                            id: $r->id,
+                        ))
+                        ->values()
+                        ->toArray()
                     : [];
-            }
 
-            // Find most recent activity
-            $lastRow = $rows->first();
-            if ($lastRow) {
-                $lastTime = Carbon::parse($lastRow->created_at);
-                $out['last_activity'] = $lastTime->toIso8601String();
-                $out['minutes_since_activity'] = (int) $lastTime->diffInMinutes(now());
-                $out['warning'] = $out['minutes_since_activity'] > self::WARNING_NO_ACTIVITY_MINUTES;
+                if (! empty($out[$source])) {
+                    $hasActivity[$source] = true;
+                    $lastActivity = $this->maxTimestamp($lastActivity, $grouped[$source]->first()->created_at ?? null);
+                }
             }
         }
 
+        if (Schema::hasTable('job_heartbeats')) {
+            $prefixes = [
+                'wikidata' => ['Wikidata'],
+                'musicbrainz' => ['MusicBrainz'],
+            ];
+
+            foreach ($sources as $source) {
+                if ($hasActivity[$source]) {
+                    continue; // Already populated from ingestion_events
+                }
+
+                $rows = DB::table('job_heartbeats')
+                    ->where(function ($q) use ($prefixes, $source) {
+                        foreach ($prefixes[$source] as $prefix) {
+                            $q->orWhere('job', 'like', "{$prefix}%");
+                        }
+                    })
+                    ->orderByDesc('created_at')
+                    ->limit(10)
+                    ->get(['id', 'job', 'metric', 'context', 'created_at']);
+
+                $out[$source] = $rows->map(fn ($r) => $this->formatIngestionEntry(
+                    source: $source,
+                    label: $r->job,
+                    metric: $r->metric,
+                    context: $r->context,
+                    timestamp: $r->created_at,
+                    id: $r->id,
+                ))->toArray();
+
+                if ($rows->isNotEmpty()) {
+                    $hasActivity[$source] = true;
+                    $lastActivity = $this->maxTimestamp($lastActivity, $rows->first()->created_at ?? null);
+                }
+            }
+        }
+
+        if ($lastActivity) {
+            $lastTime = Carbon::parse($lastActivity);
+            $out['last_activity'] = $lastTime->toIso8601String();
+            $out['minutes_since_activity'] = (int) $lastTime->diffInMinutes(now());
+            $out['warning'] = $out['minutes_since_activity'] > self::WARNING_NO_ACTIVITY_MINUTES;
+        }
+
         return $out;
+    }
+
+    protected function formatIngestionEntry(
+        string $source,
+        ?string $label,
+        ?string $metric,
+        mixed $context,
+        mixed $timestamp,
+        mixed $id,
+    ): array {
+        $time = Carbon::parse($timestamp);
+        $contextArray = $this->decodeContext($context);
+
+        return [
+            'id' => $id,
+            'source' => $source,
+            'label' => $label,
+            'metric' => $metric,
+            'context' => $contextArray,
+            'job' => $label,
+            'at' => $time->toIso8601String(),
+            'at_human' => $time->diffForHumans(),
+        ];
+    }
+
+    protected function decodeContext(mixed $context): array
+    {
+        if (is_array($context)) {
+            return $context;
+        }
+
+        if (is_string($context)) {
+            $decoded = json_decode($context, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return [];
+    }
+
+    protected function maxTimestamp(?Carbon $current, mixed $candidate): ?Carbon
+    {
+        if (! $candidate) {
+            return $current;
+        }
+
+        $time = $candidate instanceof Carbon ? $candidate : Carbon::parse($candidate);
+
+        if ($current === null || $time->gt($current)) {
+            return $time;
+        }
+
+        return $current;
     }
 
     protected function gatherHeartbeats(): array
