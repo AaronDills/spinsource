@@ -1,89 +1,158 @@
-<x-main-layout :transparentHeader="false" :showRecentReviews="true">
-    <div class="flex items-center justify-center min-h-[calc(100vh-16rem)]">
-        <div class="w-full max-w-xl px-4">
-            <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-200 text-center mb-8">
-                {{ config('app.name', 'Spin Source') }}
+<x-main-layout :transparentHeader="false" :showRecentReviews="false">
+    <x-slot name="title">{{ config('app.name', 'Spinsearch') }} - Understand the music you love</x-slot>
+
+    <!-- Hero Section -->
+    <section class="py-16 sm:py-24 px-4">
+        <div class="max-w-3xl mx-auto text-center">
+            <h1 class="text-4xl sm:text-5xl font-bold text-gray-100 mb-6">
+                Understand the music you love.
             </h1>
+            <p class="text-lg sm:text-xl text-gray-400 mb-10 leading-relaxed">
+                Spinsearch is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate the connections between albums, genres, and eras—all powered by structured, source-driven metadata.
+            </p>
+            <a href="{{ route('search.page') }}" class="inline-flex items-center px-8 py-4 text-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                Start Exploring
+                <svg class="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                </svg>
+            </a>
+        </div>
+    </section>
 
-            <div x-data="searchAutocomplete" class="relative">
-                <form :action="'/search-results?q=' + encodeURIComponent(query)" method="GET" @submit.prevent="submitSearch" class="flex gap-2">
-                    <input
-                        type="text"
-                        x-model="query"
-                        @input.debounce.300ms="search"
-                        @focus="open = results.length > 0"
-                        @keydown.escape="open = false"
-                        @keydown.arrow-down.prevent="highlightNext"
-                        @keydown.arrow-up.prevent="highlightPrev"
-                        @keydown.enter.prevent="handleEnter"
-                        placeholder="Search artists and albums..."
-                        class="flex-1 px-4 py-3 text-lg rounded-lg border border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-lg shadow-blue-500/10"
-                    >
-                    <button
-                        type="submit"
-                        :disabled="query.length < 2"
-                        class="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center"
-                    >
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
-                    </button>
-                </form>
-
-                <div
-                    x-show="open && results.length > 0"
-                    @click.away="open = false"
-                    x-transition:enter="transition ease-out duration-100"
-                    x-transition:enter-start="opacity-0 scale-95"
-                    x-transition:enter-end="opacity-100 scale-100"
-                    x-transition:leave="transition ease-in duration-75"
-                    x-transition:leave-start="opacity-100 scale-100"
-                    x-transition:leave-end="opacity-0 scale-95"
-                    class="absolute z-50 w-full mt-2 bg-gray-900 rounded-lg shadow-lg border border-gray-800 overflow-hidden text-gray-100"
-                >
-                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
-                        <template x-for="(result, index) in results" :key="result.type + '-' + result.id">
-                            <li
-                                @click="selectResult(result)"
-                                @mouseenter="highlighted = index"
-                                :class="{ 'bg-blue-900/40': highlighted === index }"
-                                class="px-4 py-3 cursor-pointer hover:bg-gray-800"
-                            >
-                                <div class="flex items-center gap-3">
-                                    <span
-                                        x-text="result.type === 'artist' ? '🎤' : '💿'"
-                                        class="text-xl"
-                                    ></span>
-                                    <div class="flex-1 min-w-0">
-                                        <p
-                                            x-text="result.title"
-                                            class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate"
-                                        ></p>
-                                        <p
-                                            x-text="result.subtext"
-                                            class="text-xs text-gray-500 dark:text-gray-400 truncate"
-                                        ></p>
-                                    </div>
-                                </div>
-                            </li>
-                        </template>
-                    </ul>
+    <!-- What Spinsearch Is -->
+    <section class="py-16 px-4 border-t border-gray-800">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-10 text-center">
+                A deeper way to explore music
+            </h2>
+            <div class="grid sm:grid-cols-2 gap-8">
+                <div class="p-6 bg-gray-900/50 rounded-lg border border-gray-800">
+                    <h3 class="text-lg font-semibold text-gray-100 mb-3">Complete Discographies</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        See every album, EP, and single an artist has released, organized chronologically. No gaps, no guesswork.
+                    </p>
                 </div>
-
-                <div
-                    x-show="loading"
-                    class="absolute right-16 top-1/2 -translate-y-1/2"
-                >
-                    <svg class="animate-spin h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                <div class="p-6 bg-gray-900/50 rounded-lg border border-gray-800">
+                    <h3 class="text-lg font-semibold text-gray-100 mb-3">Historical Context</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Understand when artists formed, their origins, genre evolution, and career arcs across decades.
+                    </p>
+                </div>
+                <div class="p-6 bg-gray-900/50 rounded-lg border border-gray-800">
+                    <h3 class="text-lg font-semibold text-gray-100 mb-3">Structured Metadata</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Information sourced from Wikidata and authoritative databases, not user-generated guesswork.
+                    </p>
+                </div>
+                <div class="p-6 bg-gray-900/50 rounded-lg border border-gray-800">
+                    <h3 class="text-lg font-semibold text-gray-100 mb-3">Complements Your Library</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Designed to work alongside Spotify, Apple Music, vinyl collections, and CDs—not replace them.
+                    </p>
                 </div>
             </div>
+        </div>
+    </section>
 
-            <p class="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
-                Discover and collect the music you love
+    <!-- What Spinsearch Is Not -->
+    <section class="py-16 px-4 border-t border-gray-800">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-10 text-center">
+                What we don't do
+            </h2>
+            <div class="space-y-6">
+                <div class="flex items-start gap-4">
+                    <span class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-800 text-gray-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </span>
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-100">Not a streaming service</h3>
+                        <p class="text-gray-400 mt-1">We don't play music. Use your preferred streaming app or physical media for listening.</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-4">
+                    <span class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-800 text-gray-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </span>
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-100">No audio playback</h3>
+                        <p class="text-gray-400 mt-1">Spinsearch is about understanding music, not listening to it.</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-4">
+                    <span class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-800 text-gray-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </span>
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-100">Not a recommendation feed</h3>
+                        <p class="text-gray-400 mt-1">No algorithmic suggestions, trending playlists, or engagement-driven content.</p>
+                    </div>
+                </div>
+                <div class="flex items-start gap-4">
+                    <span class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-800 text-gray-500">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </span>
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-100">Not a replacement</h3>
+                        <p class="text-gray-400 mt-1">We complement your existing music apps, not compete with them.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why Spinsearch Exists -->
+    <section class="py-16 px-4 border-t border-gray-800">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-8 text-center">
+                Why we built this
+            </h2>
+            <div class="space-y-6 text-gray-400 leading-relaxed">
+                <p>
+                    Streaming apps are optimized for listening, not understanding. Important context gets buried. Discographies are incomplete or disorganized. Relationships between artists, albums, and genres are hard to explore. The deeper you want to go, the less these apps help.
+                </p>
+                <p>
+                    Spinsearch makes music catalogs understandable, explorable, and connected. We organize the information that music lovers care about—complete discographies, historical context, and authoritative metadata—into a calm, browsable experience.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Future Direction -->
+    <section class="py-16 px-4 border-t border-gray-800">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-8 text-center">
+                What's next
+            </h2>
+            <p class="text-gray-400 leading-relaxed text-center mb-8">
+                Spinsearch is growing. We're exploring features like popularity and relevance signals, user reviews and ratings, personal collections, physical media tracking for vinyl and CDs, and deeper integrations with services like Discogs, Spotify, and Apple Music.
             </p>
         </div>
-    </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="py-16 px-4 border-t border-gray-800">
+        <div class="max-w-2xl mx-auto text-center">
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-4">
+                Ready to explore?
+            </h2>
+            <p class="text-gray-400 mb-8">
+                Start discovering the depth behind the music you love.
+            </p>
+            <a href="{{ route('search.page') }}" class="inline-flex items-center px-8 py-4 text-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                Go to Search
+                <svg class="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </a>
+        </div>
+    </section>
 </x-main-layout>

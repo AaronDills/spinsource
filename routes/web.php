@@ -1,12 +1,12 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\AdminJobController;
 use App\Http\Controllers\AlbumController;
 use App\Http\Controllers\ArtistController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
-use App\Http\Controllers\AdminJobController;
 use Illuminate\Support\Facades\Route;
 
 // Diagnostic route - bypasses views entirely
@@ -55,7 +55,10 @@ Route::middleware(['auth'])->group(function () {
         ->name('admin.jobs.failed.retry');
 });
 
-Route::get('/search', [SearchController::class, 'search'])->name('search');
+Route::get('/search', function () {
+    return view('search.index');
+})->name('search.page');
+Route::get('/search/autocomplete', [SearchController::class, 'search'])->name('search.autocomplete');
 Route::get('/search-results', [SearchController::class, 'results'])->name('search.results');
 Route::get('/album/{album}', [AlbumController::class, 'show'])->name('album.show');
 Route::get('/artist/{artist}', [ArtistController::class, 'show'])->name('artist.show');

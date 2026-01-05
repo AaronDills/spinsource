@@ -25,7 +25,7 @@
 
             <!-- Navigation Links -->
             <nav class="hidden sm:flex items-center space-x-6">
-                <a href="{{ route('home') }}" @class([
+                <a href="{{ route('search.page') }}" @class([
                     'text-sm font-medium transition-colors',
                     'text-gray-300 hover:text-white' => !$transparent,
                     'text-gray-200 hover:text-white' => $transparent,
@@ -137,7 +137,7 @@
                      @click.away="mobileOpen = false"
                      class="absolute top-16 left-0 right-0 bg-gray-900 border-b border-gray-800 shadow-lg z-50">
                     <div class="px-4 py-3 space-y-2">
-                        <a href="{{ route('home') }}" class="block py-2 text-gray-200 hover:text-white">Search</a>
+                        <a href="{{ route('search.page') }}" class="block py-2 text-gray-200 hover:text-white">Search</a>
                         @auth
                             <a href="{{ route('dashboard') }}" class="block py-2 text-gray-200 hover:text-white">Dashboard</a>
                             <a href="{{ route('account') }}" class="block py-2 text-gray-200 hover:text-white">Account</a>

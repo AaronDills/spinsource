@@ -20,7 +20,7 @@ Alpine.data('searchAutocomplete', () => ({
 
         this.loading = true;
         try {
-            const response = await axios.get('/search', {
+            const response = await axios.get('/search/autocomplete', {
                 params: { q: this.query }
             });
             this.results = response.data;
