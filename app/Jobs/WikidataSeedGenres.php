@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 class WikidataSeedGenres extends WikidataJob
 {
     public function __construct(
-        public int $afterOid = 0,
+        public ?int $afterOid = 0,
         public int $limit = 10000
     ) {
         parent::__construct();
@@ -28,7 +28,7 @@ class WikidataSeedGenres extends WikidataJob
     {
         $this->logStart('Seed genres');
 
-        $afterFilter = $this->afterOid > 0
+        $afterFilter = ($this->afterOid !== null && $this->afterOid > 0)
             ? "FILTER(?oid > {$this->afterOid})"
             : '';
 

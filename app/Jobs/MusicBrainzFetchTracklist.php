@@ -89,6 +89,20 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
             return;
         }
 
+        // Validate MBID format (UUID format: 8-4-4-4-12 hex chars)
+        if (! $this->isValidMbid($album->musicbrainz_release_group_mbid)) {
+            Log::warning('MusicBrainz tracklist: Invalid release group MBID format', [
+                'albumId' => $this->albumId,
+                'mbid' => $album->musicbrainz_release_group_mbid,
+            ]);
+            $this->recordHeartbeat('invalid_mbid', [
+                'album_id' => $this->albumId,
+                'mbid' => $album->musicbrainz_release_group_mbid,
+            ]);
+
+            return;
+        }
+
         // Determine which release to use
         $releaseId = $this->selectRelease($album);
         if (! $releaseId) {
@@ -145,12 +159,21 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     {
         // Use existing selection for stability (unless forced to reselect)
         if (! $this->forceReselect && $album->selected_release_mbid) {
-            Log::debug('MusicBrainz: Using existing selected release', [
-                'albumId' => $this->albumId,
-                'releaseId' => $album->selected_release_mbid,
-            ]);
+            // Validate stored MBID before using
+            if (! $this->isValidMbid($album->selected_release_mbid)) {
+                Log::warning('MusicBrainz: Invalid stored release MBID, will reselect', [
+                    'albumId' => $this->albumId,
+                    'invalidMbid' => $album->selected_release_mbid,
+                ]);
+                // Fall through to reselect
+            } else {
+                Log::debug('MusicBrainz: Using existing selected release', [
+                    'albumId' => $this->albumId,
+                    'releaseId' => $album->selected_release_mbid,
+                ]);
 
-            return $album->selected_release_mbid;
+                return $album->selected_release_mbid;
+            }
         }
 
         // Fetch releases for this release group
@@ -301,11 +324,17 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                 // Compute numeric position
                 $position = $this->parseTrackPosition($track, $fallbackPosition);
 
+                // Truncate title to 1000 chars to prevent DB overflow
+                $title = $track['title'] ?? $recording['title'] ?? 'Unknown';
+                if (mb_strlen($title) > 1000) {
+                    $title = mb_substr($title, 0, 997).'...';
+                }
+
                 $tracks[] = [
                     'album_id' => $albumId,
                     'musicbrainz_recording_id' => $recordingId,
                     'musicbrainz_release_id' => $releaseId,
-                    'title' => $track['title'] ?? $recording['title'] ?? 'Unknown',
+                    'title' => $title,
                     'position' => $position,
                     'number' => $rawNumber,
                     'disc_number' => $discNumber,
@@ -509,5 +538,23 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
         }
 
         return $count;
+    }
+
+    /**
+     * Validate MusicBrainz ID format (UUID).
+     *
+     * MBIDs must be valid UUIDs: 8-4-4-4-12 hexadecimal characters.
+     */
+    private function isValidMbid(?string $mbid): bool
+    {
+        if ($mbid === null || $mbid === '') {
+            return false;
+        }
+
+        // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        return (bool) preg_match(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i',
+            $mbid
+        );
     }
 }

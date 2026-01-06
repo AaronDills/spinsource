@@ -301,11 +301,25 @@ class WikidataEnrichArtists extends WikidataJob
                 if (! empty($linksToUpsert)) {
                     // Upsert on (artist_id, type, url) - if same combo exists, just update timestamps
                     // This is idempotent: running twice yields same state
-                    ArtistLink::upsert(
-                        $linksToUpsert,
-                        ['artist_id', 'type', 'url'],
-                        ['source', 'is_official', 'updated_at']
-                    );
+                    // Wrap in try/catch to handle race condition duplicates gracefully
+                    try {
+                        ArtistLink::upsert(
+                            $linksToUpsert,
+                            ['artist_id', 'type', 'url'],
+                            ['source', 'is_official', 'updated_at']
+                        );
+                    } catch (\Illuminate\Database\QueryException $e) {
+                        // Duplicate entry errors (1062) can occur in race conditions
+                        // Log and continue - the data exists, which is the goal
+                        if (str_contains($e->getMessage(), '1062') || str_contains($e->getMessage(), 'Duplicate entry')) {
+                            Log::warning('WikidataEnrichArtists: Duplicate link entry (race condition)', [
+                                'error' => $e->getMessage(),
+                                'links_count' => count($linksToUpsert),
+                            ]);
+                        } else {
+                            throw $e;
+                        }
+                    }
                 }
             }
         });

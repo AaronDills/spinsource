@@ -96,4 +96,38 @@ class MusicBrainzTrackParsingTest extends TestCase
         $this->assertSame([1, 2, 3], $positions);
         $this->assertCount(3, array_unique($positions), 'Positions should not collide');
     }
+
+    /**
+     * Test valid MBIDs pass validation.
+     */
+    public function test_valid_mbid_passes_validation(): void
+    {
+        $job = new MusicBrainzFetchTracklist(albumId: 1);
+        $method = new ReflectionMethod($job, 'isValidMbid');
+
+        $this->assertTrue($method->invoke($job, 'abc12345-1234-1234-1234-123456789012'));
+        $this->assertTrue($method->invoke($job, 'ABCDEF12-ABCD-ABCD-ABCD-ABCDEF123456'));
+        $this->assertTrue($method->invoke($job, '00000000-0000-0000-0000-000000000000'));
+    }
+
+    /**
+     * Test invalid MBIDs fail validation.
+     */
+    public function test_invalid_mbid_fails_validation(): void
+    {
+        $job = new MusicBrainzFetchTracklist(albumId: 1);
+        $method = new ReflectionMethod($job, 'isValidMbid');
+
+        // Null/empty
+        $this->assertFalse($method->invoke($job, null));
+        $this->assertFalse($method->invoke($job, ''));
+
+        // Wrong format
+        $this->assertFalse($method->invoke($job, 'not-a-uuid'));
+        $this->assertFalse($method->invoke($job, '12345'));
+        $this->assertFalse($method->invoke($job, 'abc12345-1234-1234-1234-12345678901')); // Too short
+        $this->assertFalse($method->invoke($job, 'abc12345-1234-1234-1234-1234567890123')); // Too long
+        $this->assertFalse($method->invoke($job, 'abc12345123412341234123456789012')); // No dashes
+        $this->assertFalse($method->invoke($job, 'ggg12345-1234-1234-1234-123456789012')); // Invalid hex
+    }
 }

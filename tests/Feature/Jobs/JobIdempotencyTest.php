@@ -45,6 +45,20 @@ class JobIdempotencyTest extends TestCase
     }
 
     /**
+     * Test WikidataSeedGenres can be constructed with null afterOid.
+     */
+    public function test_wikidata_seed_genres_accepts_null_after_oid(): void
+    {
+        // This should not throw TypeError
+        $job = new WikidataSeedGenres(null);
+        $this->assertInstanceOf(WikidataSeedGenres::class, $job);
+
+        // Also test with explicit 0
+        $job2 = new WikidataSeedGenres(0);
+        $this->assertInstanceOf(WikidataSeedGenres::class, $job2);
+    }
+
+    /**
      * Test that WikidataSeedGenres running twice doesn't create duplicates.
      */
     public function test_wikidata_seed_genres_is_idempotent(): void
