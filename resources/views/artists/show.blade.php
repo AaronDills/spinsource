@@ -237,9 +237,7 @@
                                                          loading="lazy"
                                                          class="w-full h-full object-cover group-hover:scale-105 transition-transform">
                                                 @else
-                                                    <div class="w-full h-full flex items-center justify-center">
-                                                        <span class="text-2xl">💿</span>
-                                                    </div>
+                                                    <x-importing-placeholder type="cover" size="fill" class="rounded-none" />
                                                 @endif
                                             </div>
                                             <h4 class="text-xs font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">

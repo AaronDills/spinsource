@@ -18,9 +18,7 @@
                              alt="{{ $album->title }} cover"
                              class="flex-shrink-0 w-28 h-28 sm:w-32 sm:h-32 object-cover rounded-lg bg-gray-200 dark:bg-gray-700">
                     @else
-                        <div class="flex-shrink-0 w-28 h-28 sm:w-32 sm:h-32 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                            <span class="text-5xl sm:text-6xl">💿</span>
-                        </div>
+                        <x-importing-placeholder type="cover" size="large" class="flex-shrink-0" />
                     @endif
                     <div class="flex-1 min-w-0 text-center sm:text-left">
                         <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
@@ -101,6 +99,11 @@
                                 @endforeach
                             </ol>
                         @endforeach
+                    </div>
+                @else
+                    <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Tracklist</h2>
+                        <x-importing-placeholder type="tracklist" />
                     </div>
                 @endif
 

@@ -81,11 +81,7 @@
                                                  alt="{{ $rating->album->title }}"
                                                  class="w-16 h-16 rounded object-cover flex-shrink-0">
                                         @else
-                                            <div class="w-16 h-16 rounded bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                                                </svg>
-                                            </div>
+                                            <x-importing-placeholder type="cover" class="flex-shrink-0 rounded" />
                                         @endif
                                         <div class="flex-1 min-w-0">
                                             <a href="{{ route('album.show', $rating->album) }}"
