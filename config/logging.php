@@ -10,7 +10,8 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', env('LOG_STACK', 'daily')),
+            // Default to both daily file (for admin logs page) and stderr (for cloud/container logs)
+            'channels' => explode(',', env('LOG_STACK', 'daily,stderr')),
             'ignore_exceptions' => false,
         ],
 

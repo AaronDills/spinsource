@@ -247,19 +247,69 @@ trait TracksJobMetrics
         $this->jobRun?->setCursor($cursor);
     }
 
-        protected function logStart(string $message, array $context = []): void
+    /**
+     * Get standardized logging context for this job.
+     *
+     * @return array<string, mixed>
+     */
+    protected function jobLogContext(): array
     {
-        Log::info($message, array_merge([
-            'job' => static::class,
-            'phase' => 'start',
-        ], $context));
+        $context = [
+            'job_class' => static::class,
+            'job_name' => $this->jobRunName(),
+        ];
+
+        if ($this->jobRun) {
+            $context['run_id'] = $this->jobRun->id;
+        }
+
+        // Include job ID if available (from InteractsWithQueue trait)
+        if (method_exists($this, 'job') && $this->job()) {
+            $context['job_id'] = $this->job()->getJobId();
+            $context['queue'] = $this->job()->getQueue();
+            $context['attempts'] = $this->job()->attempts();
+        }
+
+        return $context;
     }
 
+    /**
+     * Log job start with consistent context.
+     */
+    protected function logStart(string $message, array $context = []): void
+    {
+        Log::info($message, array_merge($this->jobLogContext(), ['phase' => 'start'], $context));
+    }
+
+    /**
+     * Log job end with consistent context.
+     */
     protected function logEnd(string $message, array $context = []): void
     {
-        Log::info($message, array_merge([
-            'job' => static::class,
-            'phase' => 'end',
-        ], $context));
+        Log::info($message, array_merge($this->jobLogContext(), ['phase' => 'end'], $context));
+    }
+
+    /**
+     * Log job progress with consistent context.
+     */
+    protected function logProgress(string $message, array $context = []): void
+    {
+        Log::info($message, array_merge($this->jobLogContext(), ['phase' => 'progress'], $context));
+    }
+
+    /**
+     * Log job failure with consistent context.
+     */
+    protected function logFailure(string $message, ?\Throwable $exception = null, array $context = []): void
+    {
+        $logContext = array_merge($this->jobLogContext(), ['phase' => 'failure'], $context);
+
+        if ($exception) {
+            $logContext['exception_class'] = get_class($exception);
+            $logContext['exception_message'] = $exception->getMessage();
+            $logContext['exception_file'] = $exception->getFile().':'.$exception->getLine();
+        }
+
+        Log::error($message, $logContext);
     }
 }

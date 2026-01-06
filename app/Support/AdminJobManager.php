@@ -154,7 +154,7 @@ class AdminJobManager
         $jobClass = $definition['job_class'];
 
         try {
-            dispatch(new $jobClass());
+            dispatch(new $jobClass);
 
             return [
                 'dispatched' => true,
@@ -257,11 +257,9 @@ class AdminJobManager
             ];
         }
 
-        $rows = DB::table('failed_jobs')
-            ->orderByDesc('failed_at')
-            ->get(['id', 'connection', 'queue', 'payload', 'exception', 'failed_at']);
+        $totalCount = DB::table('failed_jobs')->count();
 
-        if ($rows->isEmpty()) {
+        if ($totalCount === 0) {
             return [
                 'exists' => true,
                 'count' => 0,
@@ -269,31 +267,40 @@ class AdminJobManager
             ];
         }
 
+        // Process in chunks to avoid memory exhaustion with large datasets
+        // Only fetch columns needed: id, queue, failed_at, and first line of exception
+        // Note: chunk() requires orderBy, using id for consistent pagination
         $groups = [];
-        foreach ($rows as $row) {
-            $normalized = $this->normalizeException($row->exception);
-            $signature = sha1($normalized);
 
-            if (! isset($groups[$signature])) {
-                $groups[$signature] = [
-                    'signature' => $signature,
-                    'message' => $normalized,
-                    'count' => 0,
-                    'queues' => [],
-                    'example_id' => $row->id,
-                    'latest_failed_at' => $row->failed_at,
-                ];
-            }
+        DB::table('failed_jobs')
+            ->select(['id', 'queue', 'failed_at', DB::raw('SUBSTRING(exception, 1, 500) as exception_snippet')])
+            ->orderBy('id')
+            ->chunk(1000, function ($rows) use (&$groups) {
+                foreach ($rows as $row) {
+                    $normalized = $this->normalizeException($row->exception_snippet);
+                    $signature = sha1($normalized);
 
-            $groups[$signature]['count']++;
-            $groups[$signature]['queues'][$row->queue] = ($groups[$signature]['queues'][$row->queue] ?? 0) + 1;
-            $latest = Carbon::parse($groups[$signature]['latest_failed_at']);
-            $current = Carbon::parse($row->failed_at);
-            if ($current->gt($latest)) {
-                $groups[$signature]['latest_failed_at'] = $row->failed_at;
-                $groups[$signature]['example_id'] = $row->id;
-            }
-        }
+                    if (! isset($groups[$signature])) {
+                        $groups[$signature] = [
+                            'signature' => $signature,
+                            'message' => $normalized,
+                            'count' => 0,
+                            'queues' => [],
+                            'example_id' => $row->id,
+                            'latest_failed_at' => $row->failed_at,
+                        ];
+                    }
+
+                    $groups[$signature]['count']++;
+                    $groups[$signature]['queues'][$row->queue] = ($groups[$signature]['queues'][$row->queue] ?? 0) + 1;
+                    $latest = Carbon::parse($groups[$signature]['latest_failed_at']);
+                    $current = Carbon::parse($row->failed_at);
+                    if ($current->gt($latest)) {
+                        $groups[$signature]['latest_failed_at'] = $row->failed_at;
+                        $groups[$signature]['example_id'] = $row->id;
+                    }
+                }
+            });
 
         $groups = collect($groups)
             ->sortByDesc(fn ($g) => [$g['count'], $g['latest_failed_at']])
@@ -311,7 +318,7 @@ class AdminJobManager
 
         return [
             'exists' => true,
-            'count' => $rows->count(),
+            'count' => $totalCount,
             'groups' => $groups,
         ];
     }
@@ -325,20 +332,20 @@ class AdminJobManager
             ];
         }
 
-        $query = DB::table('failed_jobs');
         if ($signature) {
-            $ids = $this->failedJobIdsForSignature($signature);
-            if (empty($ids)) {
+            $uuids = $this->failedJobIdsForSignature($signature);
+            if (empty($uuids)) {
                 return [
                     'ok' => false,
                     'message' => 'No failed jobs found for this error',
                 ];
             }
-            $query->whereIn('id', $ids);
+            $count = DB::table('failed_jobs')->whereIn('uuid', $uuids)->count();
+            DB::table('failed_jobs')->whereIn('uuid', $uuids)->delete();
+        } else {
+            $count = DB::table('failed_jobs')->count();
+            DB::table('failed_jobs')->delete();
         }
-
-        $count = $query->count();
-        $query->delete();
 
         return [
             'ok' => true,
@@ -437,7 +444,7 @@ class AdminJobManager
             return $cached;
         }
 
-        $cached = Schema::hasTable((new JobRun())->getTable());
+        $cached = Schema::hasTable((new JobRun)->getTable());
 
         return $cached;
     }
@@ -804,22 +811,33 @@ class AdminJobManager
 
     protected function failedJobIdsForSignature(string $signature): array
     {
-        $rows = DB::table('failed_jobs')
-            ->get(['id', 'exception']);
-
         $ids = [];
-        foreach ($rows as $row) {
-            $normalized = $this->normalizeException($row->exception);
-            if (sha1($normalized) === $signature) {
-                $ids[] = $row->id;
-            }
-        }
+
+        // Process in chunks to avoid memory exhaustion
+        // orderBy is required for chunk() to work correctly
+        DB::table('failed_jobs')
+            ->select(['uuid', DB::raw('SUBSTRING(exception, 1, 500) as exception_snippet')])
+            ->orderBy('id')
+            ->chunk(1000, function ($rows) use ($signature, &$ids) {
+                foreach ($rows as $row) {
+                    $normalized = $this->normalizeException($row->exception_snippet);
+                    if (sha1($normalized) === $signature) {
+                        $ids[] = $row->uuid;
+                    }
+                }
+            });
 
         return $ids;
     }
 
     protected function allFailedJobIds(): array
     {
-        return DB::table('failed_jobs')->pluck('id')->all();
+        // Return UUIDs (not IDs) for queue:retry command
+        // Limit to prevent overwhelming the queue with retries
+        return DB::table('failed_jobs')
+            ->orderByDesc('failed_at')
+            ->limit(1000)
+            ->pluck('uuid')
+            ->all();
     }
 }

@@ -29,8 +29,8 @@ class AdminFailedJobsTest extends TestCase
         $newer = Carbon::now()->subMinutes(2);
         $latestOther = Carbon::now()->subMinute();
 
-        $firstId = $this->seedFailedJob("First error message\nStack trace line", 'alpha', $older);
-        $secondId = $this->seedFailedJob("First error message\r\nAnother trace line", 'beta', $newer);
+        [$firstId, $firstUuid] = $this->seedFailedJob("First error message\nStack trace line", 'alpha', $older);
+        [$secondId, $secondUuid] = $this->seedFailedJob("First error message\r\nAnother trace line", 'beta', $newer);
         $this->seedFailedJob('Different failure message', 'alpha', $latestOther);
 
         $summary = $this->manager->failedJobsSummary();
@@ -57,24 +57,24 @@ class AdminFailedJobsTest extends TestCase
     public function test_clear_failed_jobs_by_signature_removes_only_matching_rows(): void
     {
         $signature = sha1('Clear me');
-        $first = $this->seedFailedJob("Clear me\nStack", 'alpha');
-        $second = $this->seedFailedJob("Clear me\nAnother stack", 'beta');
-        $keep = $this->seedFailedJob('Leave me alone', 'alpha');
+        [$firstId, $firstUuid] = $this->seedFailedJob("Clear me\nStack", 'alpha');
+        [$secondId, $secondUuid] = $this->seedFailedJob("Clear me\nAnother stack", 'beta');
+        [$keepId, $keepUuid] = $this->seedFailedJob('Leave me alone', 'alpha');
 
         $result = $this->manager->clearFailedJobs($signature);
 
         $this->assertTrue($result['ok']);
         $this->assertEquals(2, $result['cleared']);
-        $this->assertDatabaseMissing('failed_jobs', ['id' => $first]);
-        $this->assertDatabaseMissing('failed_jobs', ['id' => $second]);
-        $this->assertDatabaseHas('failed_jobs', ['id' => $keep]);
+        $this->assertDatabaseMissing('failed_jobs', ['uuid' => $firstUuid]);
+        $this->assertDatabaseMissing('failed_jobs', ['uuid' => $secondUuid]);
+        $this->assertDatabaseHas('failed_jobs', ['uuid' => $keepUuid]);
     }
 
     public function test_retry_failed_jobs_dispatches_all_ids(): void
     {
-        $first = $this->seedFailedJob('Retry all one', 'alpha');
-        $second = $this->seedFailedJob('Retry all two', 'beta');
-        $ids = collect([$first, $second])->sort()->values();
+        [$firstId, $firstUuid] = $this->seedFailedJob('Retry all one', 'alpha');
+        [$secondId, $secondUuid] = $this->seedFailedJob('Retry all two', 'beta');
+        $expectedUuids = [$firstUuid, $secondUuid];
 
         Artisan::spy();
 
@@ -84,13 +84,20 @@ class AdminFailedJobsTest extends TestCase
         $this->assertEquals(2, $result['retried']);
         Artisan::shouldHaveReceived('call')
             ->once()
-            ->with('queue:retry', ['id' => $ids->implode(',')]);
+            ->with('queue:retry', \Mockery::on(function ($args) use ($expectedUuids) {
+                // Check that all expected UUIDs are in the id string (order doesn't matter)
+                $passedUuids = explode(',', $args['id']);
+                sort($passedUuids);
+                sort($expectedUuids);
+
+                return $passedUuids === $expectedUuids;
+            }));
     }
 
     public function test_retry_failed_jobs_scoped_by_signature(): void
     {
         $wantedSignature = sha1('Retry me');
-        $retryId = $this->seedFailedJob("Retry me\nstack", 'alpha');
+        [$retryId, $retryUuid] = $this->seedFailedJob("Retry me\nstack", 'alpha');
         $this->seedFailedJob('Do not retry', 'beta');
 
         Artisan::spy();
@@ -101,18 +108,26 @@ class AdminFailedJobsTest extends TestCase
         $this->assertEquals(1, $result['retried']);
         Artisan::shouldHaveReceived('call')
             ->once()
-            ->with('queue:retry', ['id' => (string) $retryId]);
+            ->with('queue:retry', ['id' => $retryUuid]);
     }
 
-    private function seedFailedJob(string $message, string $queue, ?Carbon $failedAt = null): int
+    /**
+     * Seed a failed job and return both numeric ID and UUID.
+     *
+     * @return array{int, string} [id, uuid]
+     */
+    private function seedFailedJob(string $message, string $queue, ?Carbon $failedAt = null): array
     {
-        return DB::table('failed_jobs')->insertGetId([
-            'uuid' => (string) Str::uuid(),
+        $uuid = (string) Str::uuid();
+        $id = DB::table('failed_jobs')->insertGetId([
+            'uuid' => $uuid,
             'connection' => 'database',
             'queue' => $queue,
             'payload' => json_encode(['displayName' => 'App\\Jobs\\ExampleJob']),
             'exception' => $message,
             'failed_at' => ($failedAt ?? Carbon::now())->format('Y-m-d H:i:s'),
         ]);
+
+        return [$id, $uuid];
     }
 }
