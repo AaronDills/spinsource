@@ -62,11 +62,11 @@
     </div>
 
 <script>
-const DATA_URL = '{{ route('admin.jobs.data') }}';
-const DISPATCH_URL = '{{ route('admin.jobs.dispatch') }}';
-const CANCEL_URL = '{{ route('admin.jobs.cancel') }}';
-const CLEAR_FAILED_URL = '{{ route('admin.jobs.failed.clear') }}';
-const RETRY_FAILED_URL = '{{ route('admin.jobs.failed.retry') }}';
+const DATA_URL = '{{ route('api.admin.jobs.data') }}';
+const DISPATCH_URL = '{{ route('api.admin.jobs.dispatch') }}';
+const CANCEL_URL = '{{ route('api.admin.jobs.cancel') }}';
+const CLEAR_FAILED_URL = '{{ route('api.admin.jobs.failed.clear') }}';
+const RETRY_FAILED_URL = '{{ route('api.admin.jobs.failed.retry') }}';
 
 let refreshInterval;
 let currentTab = 'jobs';

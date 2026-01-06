@@ -154,10 +154,133 @@ class RouteTest extends TestCase
         $response->assertOk();
     }
 
+    // -------------------------------------------------------------------------
+    // Search Routes
+    // -------------------------------------------------------------------------
+
+    public function test_search_page_route_exists(): void
+    {
+        $response = $this->get('/search');
+
+        $response->assertOk();
+    }
+
+    public function test_search_page_returns_html(): void
+    {
+        $response = $this->get('/search');
+
+        $response->assertOk();
+        // Accept either uppercase or lowercase charset
+        $contentType = $response->headers->get('content-type');
+        $this->assertStringContainsString('text/html', $contentType);
+    }
+
+    public function test_search_results_route_exists(): void
+    {
+        $response = $this->get('/search-results');
+
+        $response->assertOk();
+    }
+
+    public function test_search_results_accepts_query_parameter(): void
+    {
+        $response = $this->get('/search-results?q=test');
+
+        $response->assertOk();
+    }
+
+    // -------------------------------------------------------------------------
+    // API Routes
+    // -------------------------------------------------------------------------
+
+    public function test_api_search_route_exists(): void
+    {
+        $response = $this->getJson('/api/search?q=test');
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/json');
+    }
+
+    public function test_api_search_returns_empty_array_for_short_query(): void
+    {
+        $response = $this->getJson('/api/search?q=a');
+
+        $response->assertOk();
+        $response->assertJson([]);
+    }
+
+    public function test_api_search_returns_array_structure(): void
+    {
+        $response = $this->getJson('/api/search?q=test');
+
+        $response->assertOk();
+        $this->assertIsArray($response->json());
+    }
+
+    // -------------------------------------------------------------------------
+    // Admin Routes
+    // -------------------------------------------------------------------------
+
+    public function test_admin_monitoring_route_requires_auth(): void
+    {
+        $response = $this->get('/admin/monitoring');
+
+        $response->assertRedirect('/login');
+    }
+
+    public function test_admin_logs_route_requires_auth(): void
+    {
+        $response = $this->get('/admin/logs');
+
+        $response->assertRedirect('/login');
+    }
+
+    public function test_admin_jobs_route_requires_auth(): void
+    {
+        $response = $this->get('/admin/jobs');
+
+        $response->assertRedirect('/login');
+    }
+
+    public function test_admin_api_routes_require_auth(): void
+    {
+        $apiRoutes = [
+            ['GET', '/api/admin/monitoring/data'],
+            ['POST', '/api/admin/monitoring/clear-failed'],
+            ['GET', '/api/admin/logs/data'],
+            ['GET', '/api/admin/logs/files'],
+            ['GET', '/api/admin/jobs/data'],
+            ['POST', '/api/admin/jobs/dispatch'],
+            ['POST', '/api/admin/jobs/cancel'],
+            ['POST', '/api/admin/jobs/failed/clear'],
+            ['POST', '/api/admin/jobs/failed/retry'],
+        ];
+
+        foreach ($apiRoutes as [$method, $route]) {
+            $response = $method === 'GET'
+                ? $this->getJson($route)
+                : $this->postJson($route);
+
+            $response->assertUnauthorized();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Named Routes Exist
+    // -------------------------------------------------------------------------
+
     public function test_all_named_routes_exist(): void
     {
         $routes = [
+            // Public routes
             'home',
+            'search.page',
+            'search.results',
+            // Auth routes
+            'login',
+            'register',
+            'logout',
+            // User routes
             'dashboard',
             'account',
             'account.reviews',
@@ -165,9 +288,21 @@ class RouteTest extends TestCase
             'profile.edit',
             'profile.update',
             'profile.destroy',
-            'login',
-            'register',
-            'logout',
+            // Admin HTML routes
+            'admin.monitoring',
+            'admin.logs',
+            'admin.jobs',
+            // API routes
+            'api.search',
+            'api.admin.monitoring.data',
+            'api.admin.monitoring.clear-failed',
+            'api.admin.logs.data',
+            'api.admin.logs.files',
+            'api.admin.jobs.data',
+            'api.admin.jobs.dispatch',
+            'api.admin.jobs.cancel',
+            'api.admin.jobs.failed.clear',
+            'api.admin.jobs.failed.retry',
         ];
 
         foreach ($routes as $routeName) {

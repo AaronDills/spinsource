@@ -196,7 +196,7 @@
         </div>
 
 <script>
-const DATA_URL = '{{ route('admin.monitoring.data') }}';
+const DATA_URL = '{{ route('api.admin.monitoring.data') }}';
 let refreshInterval;
 
 async function fetchData(manual = false) {
@@ -415,7 +415,7 @@ async function clearFailedJobs() {
     btn.textContent = 'Clearing...';
 
     try {
-        const res = await fetch('{{ route("admin.monitoring.clear-failed") }}', {
+        const res = await fetch('{{ route("api.admin.monitoring.clear-failed") }}', {
             method: 'POST',
             credentials: 'same-origin',
             headers: {

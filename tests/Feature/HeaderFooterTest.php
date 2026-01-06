@@ -135,8 +135,8 @@ class HeaderFooterTest extends TestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        $response->assertSee('Search artists and albums...');
-        $response->assertSee('Discover and collect the music you love');
+        $response->assertSee('Understand the music you love');
+        $response->assertSee('Start Exploring');
     }
 
     public function test_footer_shows_copyright(): void

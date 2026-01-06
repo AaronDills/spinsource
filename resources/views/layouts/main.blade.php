@@ -6,13 +6,13 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
         {{-- Page Title --}}
-        <title>{{ $title ?? config('app.name', 'Spinsearch') }}</title>
+        <title>{{ $title ?? config('app.name', 'Spin Source') }}</title>
 
         {{-- Meta Description --}}
         @if($description ?? false)
             <meta name="description" content="{{ $description }}">
         @else
-            <meta name="description" content="Spinsearch is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras.">
+            <meta name="description" content="Spin Source is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras.">
         @endif
 
         {{-- Robots Directive --}}
@@ -23,23 +23,23 @@
 
         {{-- OpenGraph Tags --}}
         <meta property="og:type" content="{{ $ogType ?? 'website' }}">
-        <meta property="og:site_name" content="{{ config('app.name', 'Spinsearch') }}">
-        <meta property="og:title" content="{{ $title ?? config('app.name', 'Spinsearch') }}">
+        <meta property="og:site_name" content="{{ config('app.name', 'Spin Source') }}">
+        <meta property="og:title" content="{{ $title ?? config('app.name', 'Spin Source') }}">
         @if($description ?? false)
             <meta property="og:description" content="{{ $description }}">
         @else
-            <meta property="og:description" content="Spinsearch is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras.">
+            <meta property="og:description" content="Spin Source is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras.">
         @endif
         <meta property="og:url" content="{{ $canonical ?? \App\Services\SeoService::canonicalUrl() }}">
         <meta property="og:image" content="{{ $ogImage ?? \App\Services\SeoService::defaultOgImage() }}">
 
         {{-- Twitter Card Tags --}}
         <meta name="twitter:card" content="summary_large_image">
-        <meta name="twitter:title" content="{{ $title ?? config('app.name', 'Spinsearch') }}">
+        <meta name="twitter:title" content="{{ $title ?? config('app.name', 'Spin Source') }}">
         @if($description ?? false)
             <meta name="twitter:description" content="{{ $description }}">
         @else
-            <meta name="twitter:description" content="Spinsearch is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras.">
+            <meta name="twitter:description" content="Spin Source is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras.">
         @endif
         <meta name="twitter:image" content="{{ $ogImage ?? \App\Services\SeoService::defaultOgImage() }}">
 

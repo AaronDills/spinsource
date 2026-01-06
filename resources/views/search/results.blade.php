@@ -1,5 +1,5 @@
 <x-main-layout :transparentHeader="false" :showRecentReviews="false">
-    <x-slot name="title">Search: {{ $query }} - {{ config('app.name', 'Laravel') }}</x-slot>
+    <x-slot name="title">Search: {{ $query }} - {{ config('app.name', 'Spin Source') }}</x-slot>
 
     <div class="max-w-6xl mx-auto px-4 py-8">
         <h1 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-2">

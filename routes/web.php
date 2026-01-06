@@ -19,49 +19,21 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
-// Admin monitoring routes
+// Admin page routes (HTML pages only - JSON endpoints are in api.php)
 Route::middleware(['auth'])->group(function () {
     Route::get('/admin/monitoring', [\App\Http\Controllers\AdminMonitoringController::class, 'index'])
         ->name('admin.monitoring');
 
-    Route::get('/admin/monitoring/data', [\App\Http\Controllers\AdminMonitoringController::class, 'data'])
-        ->name('admin.monitoring.data');
-
     Route::get('/admin/logs', [\App\Http\Controllers\AdminLogController::class, 'index'])
         ->name('admin.logs');
 
-    Route::get('/admin/logs/data', [\App\Http\Controllers\AdminLogController::class, 'data'])
-        ->name('admin.logs.data');
-
-    Route::get('/admin/logs/files', [\App\Http\Controllers\AdminLogController::class, 'files'])
-        ->name('admin.logs.files');
-
-    Route::post('/admin/monitoring/clear-failed', [\App\Http\Controllers\AdminMonitoringController::class, 'clearFailedJobs'])
-        ->name('admin.monitoring.clear-failed');
-
     Route::get('/admin/jobs', [AdminJobController::class, 'index'])
         ->name('admin.jobs');
-
-    Route::get('/admin/jobs/data', [AdminJobController::class, 'data'])
-        ->name('admin.jobs.data');
-
-    Route::post('/admin/jobs/dispatch', [AdminJobController::class, 'dispatch'])
-        ->name('admin.jobs.dispatch');
-
-    Route::post('/admin/jobs/cancel', [AdminJobController::class, 'cancel'])
-        ->name('admin.jobs.cancel');
-
-    Route::post('/admin/jobs/failed/clear', [AdminJobController::class, 'clearFailed'])
-        ->name('admin.jobs.failed.clear');
-
-    Route::post('/admin/jobs/failed/retry', [AdminJobController::class, 'retryFailed'])
-        ->name('admin.jobs.failed.retry');
 });
 
 Route::get('/search', function () {
     return view('search.index');
 })->name('search.page');
-Route::get('/search/autocomplete', [SearchController::class, 'search'])->name('search.autocomplete');
 Route::get('/search-results', [SearchController::class, 'results'])->name('search.results');
 Route::get('/album/{album}', [AlbumController::class, 'show'])->name('album.show');
 Route::get('/artist/{artist}', [ArtistController::class, 'show'])->name('artist.show');

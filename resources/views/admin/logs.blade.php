@@ -114,8 +114,8 @@
         </div>
 
 <script>
-const FILES_URL = '{{ route('admin.logs.files') }}';
-const DATA_URL = '{{ route('admin.logs.data') }}';
+const FILES_URL = '{{ route('api.admin.logs.files') }}';
+const DATA_URL = '{{ route('api.admin.logs.data') }}';
 
 let currentOffset = 0;
 let currentTotal = 0;

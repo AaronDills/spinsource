@@ -1,8 +1,8 @@
 <x-main-layout
     :transparentHeader="false"
     :showRecentReviews="false"
-    title="{{ config('app.name', 'Spinsearch') }} - Understand the music you love"
-    description="Spinsearch is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras."
+    title="{{ config('app.name', 'Spin Source') }} - Understand the music you love"
+    description="Spin Source is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras."
     :jsonLd="\App\Services\SeoService::websiteJsonLd()"
 >
     <!-- Hero Section -->
@@ -12,7 +12,7 @@
                 Understand the music you love.
             </h1>
             <p class="text-lg sm:text-xl text-gray-400 mb-10 leading-relaxed">
-                Spinsearch is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate the connections between albums, genres, and eras—all powered by structured, source-driven metadata.
+                Spin Source is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate the connections between albums, genres, and eras—all powered by structured, source-driven metadata.
             </p>
             <a href="{{ route('search.page') }}" class="inline-flex items-center px-8 py-4 text-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
                 Start Exploring
@@ -23,7 +23,7 @@
         </div>
     </section>
 
-    <!-- What Spinsearch Is -->
+    <!-- What Spin Source Is -->
     <section class="py-16 px-4 border-t border-gray-800">
         <div class="max-w-4xl mx-auto">
             <h2 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-10 text-center">
@@ -58,7 +58,7 @@
         </div>
     </section>
 
-    <!-- What Spinsearch Is Not -->
+    <!-- What Spin Source Is Not -->
     <section class="py-16 px-4 border-t border-gray-800">
         <div class="max-w-3xl mx-auto">
             <h2 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-10 text-center">
@@ -84,7 +84,7 @@
                     </span>
                     <div>
                         <h3 class="text-lg font-medium text-gray-100">No audio playback</h3>
-                        <p class="text-gray-400 mt-1">Spinsearch is about understanding music, not listening to it.</p>
+                        <p class="text-gray-400 mt-1">Spin Source is about understanding music, not listening to it.</p>
                     </div>
                 </div>
                 <div class="flex items-start gap-4">
@@ -113,7 +113,7 @@
         </div>
     </section>
 
-    <!-- Why Spinsearch Exists -->
+    <!-- Why Spin Source Exists -->
     <section class="py-16 px-4 border-t border-gray-800">
         <div class="max-w-3xl mx-auto">
             <h2 class="text-2xl sm:text-3xl font-bold text-gray-100 mb-8 text-center">
@@ -124,7 +124,7 @@
                     Streaming apps are optimized for listening, not understanding. Important context gets buried. Discographies are incomplete or disorganized. Relationships between artists, albums, and genres are hard to explore. The deeper you want to go, the less these apps help.
                 </p>
                 <p>
-                    Spinsearch makes music catalogs understandable, explorable, and connected. We organize the information that music lovers care about—complete discographies, historical context, and authoritative metadata—into a calm, browsable experience.
+                    Spin Source makes music catalogs understandable, explorable, and connected. We organize the information that music lovers care about—complete discographies, historical context, and authoritative metadata—into a calm, browsable experience.
                 </p>
             </div>
         </div>
@@ -137,7 +137,7 @@
                 What's next
             </h2>
             <p class="text-gray-400 leading-relaxed text-center mb-8">
-                Spinsearch is growing. We're exploring features like popularity and relevance signals, user reviews and ratings, personal collections, physical media tracking for vinyl and CDs, and deeper integrations with services like Discogs, Spotify, and Apple Music.
+                Spin Source is growing. We're exploring features like popularity and relevance signals, user reviews and ratings, personal collections, physical media tracking for vinyl and CDs, and deeper integrations with services like Discogs, Spotify, and Apple Music.
             </p>
         </div>
     </section>

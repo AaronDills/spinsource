@@ -35,14 +35,14 @@ class AdminMonitoringTest extends TestCase
 
     public function test_guest_cannot_access_monitoring_data(): void
     {
-        $response = $this->getJson('/admin/monitoring/data');
+        $response = $this->getJson('/api/admin/monitoring/data');
 
         $response->assertUnauthorized();
     }
 
     public function test_guest_cannot_clear_failed_jobs(): void
     {
-        $response = $this->postJson('/admin/monitoring/clear-failed');
+        $response = $this->postJson('/api/admin/monitoring/clear-failed');
 
         $response->assertUnauthorized();
     }
@@ -60,7 +60,7 @@ class AdminMonitoringTest extends TestCase
     {
         $user = $this->createRegularUser();
 
-        $response = $this->actingAs($user)->getJson('/admin/monitoring/data');
+        $response = $this->actingAs($user)->getJson('/api/admin/monitoring/data');
 
         $response->assertForbidden();
     }
@@ -69,7 +69,7 @@ class AdminMonitoringTest extends TestCase
     {
         $user = $this->createRegularUser();
 
-        $response = $this->actingAs($user)->postJson('/admin/monitoring/clear-failed');
+        $response = $this->actingAs($user)->postJson('/api/admin/monitoring/clear-failed');
 
         $response->assertForbidden();
     }
@@ -92,7 +92,7 @@ class AdminMonitoringTest extends TestCase
     {
         $admin = $this->createAdminUser();
 
-        $response = $this->actingAs($admin)->getJson('/admin/monitoring/data');
+        $response = $this->actingAs($admin)->getJson('/api/admin/monitoring/data');
 
         $response->assertOk();
         $response->assertJsonStructure([
@@ -115,7 +115,7 @@ class AdminMonitoringTest extends TestCase
     {
         $admin = $this->createAdminUser();
 
-        $response = $this->actingAs($admin)->getJson('/admin/monitoring/data');
+        $response = $this->actingAs($admin)->getJson('/api/admin/monitoring/data');
 
         $response->assertOk();
         $response->assertJsonStructure([
@@ -132,7 +132,7 @@ class AdminMonitoringTest extends TestCase
     {
         $admin = $this->createAdminUser();
 
-        $response = $this->actingAs($admin)->getJson('/admin/monitoring/data');
+        $response = $this->actingAs($admin)->getJson('/api/admin/monitoring/data');
 
         $response->assertOk();
 
@@ -146,7 +146,7 @@ class AdminMonitoringTest extends TestCase
     {
         $admin = $this->createAdminUser();
 
-        $response = $this->actingAs($admin)->getJson('/admin/monitoring/data');
+        $response = $this->actingAs($admin)->getJson('/api/admin/monitoring/data');
 
         $response->assertOk();
         $response->assertJsonStructure([
@@ -166,7 +166,7 @@ class AdminMonitoringTest extends TestCase
     {
         $admin = $this->createAdminUser();
 
-        $response = $this->actingAs($admin)->getJson('/admin/monitoring/data');
+        $response = $this->actingAs($admin)->getJson('/api/admin/monitoring/data');
 
         $response->assertOk();
         $response->assertJsonStructure([
@@ -211,7 +211,7 @@ class AdminMonitoringTest extends TestCase
             $this->assertEquals(2, DB::table('failed_jobs')->count());
         }
 
-        $response = $this->actingAs($admin)->postJson('/admin/monitoring/clear-failed');
+        $response = $this->actingAs($admin)->postJson('/api/admin/monitoring/clear-failed');
 
         $response->assertOk();
         $response->assertJson([
@@ -241,7 +241,7 @@ class AdminMonitoringTest extends TestCase
             ]);
         }
 
-        $response = $this->actingAs($admin)->postJson('/admin/monitoring/clear-failed');
+        $response = $this->actingAs($admin)->postJson('/api/admin/monitoring/clear-failed');
 
         $response->assertOk();
         $response->assertJsonStructure([
@@ -264,7 +264,7 @@ class AdminMonitoringTest extends TestCase
             DB::table('failed_jobs')->truncate();
         }
 
-        $response = $this->actingAs($admin)->postJson('/admin/monitoring/clear-failed');
+        $response = $this->actingAs($admin)->postJson('/api/admin/monitoring/clear-failed');
 
         $response->assertOk();
         $response->assertJson([
@@ -281,7 +281,7 @@ class AdminMonitoringTest extends TestCase
     {
         $admin = $this->createAdminUser();
 
-        $response = $this->actingAs($admin)->getJson('/admin/monitoring/data');
+        $response = $this->actingAs($admin)->getJson('/api/admin/monitoring/data');
 
         $response->assertOk();
 

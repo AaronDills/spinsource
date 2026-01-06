@@ -7,8 +7,8 @@
 <x-main-layout
     :transparentHeader="false"
     :showRecentReviews="true"
-    title="Search Artists and Albums - {{ config('app.name', 'Spinsearch') }}"
-    description="Search for artists and albums on Spinsearch. Explore complete discographies, discover artist histories, and find detailed information about your favorite music."
+    title="Search Artists and Albums - {{ config('app.name', 'Spin Source') }}"
+    description="Search for artists and albums on Spin Source. Explore complete discographies, discover artist histories, and find detailed information about your favorite music."
     :robots="$seoRobots"
     :canonical="$seoCanonical"
 >
@@ -98,6 +98,29 @@
             <p class="text-center text-sm text-gray-500 mt-4">
                 Explore artists, albums, and discographies
             </p>
+
+            <!-- Example search chips -->
+            <div class="mt-8 text-center">
+                <p class="text-xs text-gray-500 mb-3">Try searching for:</p>
+                <div class="flex flex-wrap justify-center gap-2">
+                    <a href="{{ route('search.results', ['q' => 'Radiohead']) }}"
+                       class="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-full transition-colors border border-gray-700">
+                        Radiohead
+                    </a>
+                    <a href="{{ route('search.results', ['q' => 'Abbey Road']) }}"
+                       class="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-full transition-colors border border-gray-700">
+                        Abbey Road
+                    </a>
+                    <a href="{{ route('search.results', ['q' => 'Miles Davis']) }}"
+                       class="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-full transition-colors border border-gray-700">
+                        Miles Davis
+                    </a>
+                    <a href="{{ route('search.results', ['q' => 'Nevermind']) }}"
+                       class="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-full transition-colors border border-gray-700">
+                        Nevermind
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 </x-main-layout>
