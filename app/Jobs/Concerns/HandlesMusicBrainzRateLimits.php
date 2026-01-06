@@ -96,6 +96,12 @@ trait HandlesMusicBrainzRateLimits
                     continue;
                 }
 
+                // Handle 404 gracefully - entity not found is not an error condition
+                // Return the response so callers can check and handle appropriately
+                if ($status === 404) {
+                    return $response;
+                }
+
                 // For other 4xx (except 429), do not retry — throw immediately
                 $response->throw();
 

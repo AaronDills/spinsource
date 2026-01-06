@@ -3,12 +3,12 @@
 namespace App\Jobs;
 
 use App\Enums\ArtistLinkType;
+use App\Jobs\Concerns\RetriesOnDeadlock;
 use App\Models\Artist;
 use App\Models\ArtistLink;
 use App\Models\Country;
 use App\Models\DataSourceQuery;
 use App\Models\Genre;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\Log;
  */
 class WikidataEnrichArtists extends WikidataJob
 {
+    use RetriesOnDeadlock;
+
     /** @param array<int,string> $artistQids */
     public function __construct(public array $artistQids = [])
     {
@@ -173,7 +175,8 @@ class WikidataEnrichArtists extends WikidataJob
 
         $errors = 0;
 
-        DB::transaction(function () use ($countriesToUpsert, $artistUpdates, $genresToAttach, $artistLinks, &$errors) {
+        // Use deadlock-aware transaction to handle transient MySQL deadlocks
+        $this->runWithDeadlockRetry(function () use ($countriesToUpsert, $artistUpdates, $genresToAttach, $artistLinks, &$errors) {
             // Countries
             if (! empty($countriesToUpsert)) {
                 Country::upsert(array_values($countriesToUpsert), ['wikidata_qid'], ['name']);
@@ -271,17 +274,37 @@ class WikidataEnrichArtists extends WikidataJob
                 }
             }
 
-            // Links
+            // Links - use upsert for idempotency
+            // Unique constraint is (artist_id, type, url), so we group links by artist
+            // and upsert all at once to handle changes properly
             if (! empty($artistLinks)) {
+                $linksToUpsert = [];
+                $now = now();
+
                 foreach ($artistLinks as $link) {
                     $artist = Artist::where('wikidata_qid', $link['artist_qid'])->first();
                     if (! $artist) {
                         continue;
                     }
 
-                    ArtistLink::updateOrCreate(
-                        ['artist_id' => $artist->id, 'type' => $link['type']],
-                        ['url' => $link['url']]
+                    $linksToUpsert[] = [
+                        'artist_id' => $artist->id,
+                        'type' => $link['type'],
+                        'url' => $link['url'],
+                        'source' => 'wikidata',
+                        'is_official' => true,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
+                }
+
+                if (! empty($linksToUpsert)) {
+                    // Upsert on (artist_id, type, url) - if same combo exists, just update timestamps
+                    // This is idempotent: running twice yields same state
+                    ArtistLink::upsert(
+                        $linksToUpsert,
+                        ['artist_id', 'type', 'url'],
+                        ['source', 'is_official', 'updated_at']
                     );
                 }
             }

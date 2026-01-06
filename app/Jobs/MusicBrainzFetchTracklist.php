@@ -69,6 +69,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
             Log::warning('MusicBrainz tracklist: Album not found', [
                 'albumId' => $this->albumId,
             ]);
+
             return;
         }
 
@@ -84,6 +85,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                 'albumId' => $this->albumId,
             ]);
             $this->recordHeartbeat('missing_release_group', ['album_id' => $this->albumId]);
+
             return;
         }
 
@@ -98,6 +100,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
         if ($media === null) {
             // Rate limited - job was released for retry
             $this->recordHeartbeat('rate_limited', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
+
             return;
         }
 
@@ -107,6 +110,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                 'releaseId' => $releaseId,
             ]);
             $this->recordHeartbeat('no_media', ['album_id' => $this->albumId, 'release_id' => $releaseId]);
+
             return;
         }
 
@@ -145,6 +149,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                 'albumId' => $this->albumId,
                 'releaseId' => $album->selected_release_mbid,
             ]);
+
             return $album->selected_release_mbid;
         }
 
@@ -154,6 +159,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
         if ($releases === null) {
             // Rate limited - job will be retried
             $this->recordHeartbeat('rate_limited_releases', ['album_id' => $this->albumId]);
+
             return null;
         }
 
@@ -166,6 +172,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                 'album_id' => $this->albumId,
                 'release_group' => $album->musicbrainz_release_group_mbid,
             ]);
+
             return null;
         }
 
@@ -201,14 +208,15 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
                 'albumId' => $album->id,
                 'releaseId' => $releaseId,
             ]);
+
             return 0;
         }
 
         // Separate tracks with and without recording IDs
         // Tracks WITH recording IDs use upsert (stable key)
         // Tracks WITHOUT recording IDs use position-based matching (fallback)
-        $tracksWithRecordingId = array_filter($tracks, fn($t) => $t['musicbrainz_recording_id'] !== null);
-        $tracksWithoutRecordingId = array_filter($tracks, fn($t) => $t['musicbrainz_recording_id'] === null);
+        $tracksWithRecordingId = array_filter($tracks, fn ($t) => $t['musicbrainz_recording_id'] !== null);
+        $tracksWithoutRecordingId = array_filter($tracks, fn ($t) => $t['musicbrainz_recording_id'] === null);
 
         DB::transaction(function () use ($album, $tracksWithRecordingId, $tracksWithoutRecordingId, $tracks) {
             // Upsert tracks with recording IDs (stable, idempotent)
@@ -238,7 +246,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
             // Only tracks with recording IDs that aren't in our new set
             $validRecordingIds = array_filter(
                 array_column($tracks, 'musicbrainz_recording_id'),
-                fn($id) => $id !== null
+                fn ($id) => $id !== null
             );
 
             // Delete tracks with recording IDs not in the new set
@@ -251,15 +259,15 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
             // For tracks without recording IDs, delete by position not in new set
             $validPositions = collect($tracksWithoutRecordingId)
-                ->map(fn($t) => $t['disc_number'] . ':' . $t['position'])
+                ->map(fn ($t) => $t['disc_number'].':'.$t['position'])
                 ->toArray();
 
             if (! empty($tracksWithoutRecordingId)) {
                 Track::where('album_id', $album->id)
                     ->whereNull('musicbrainz_recording_id')
                     ->get(['id', 'disc_number', 'position'])
-                    ->filter(fn($t) => ! in_array($t->disc_number . ':' . $t->position, $validPositions))
-                    ->each(fn($t) => $t->delete());
+                    ->filter(fn ($t) => ! in_array($t->disc_number.':'.$t->position, $validPositions))
+                    ->each(fn ($t) => $t->delete());
             }
         });
 
@@ -316,7 +324,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     /**
      * Fetch all releases for a release group.
      *
-     * @return array|null Null if rate-limited
+     * @return array|null Null if rate-limited or not found
      */
     private function fetchReleases(string $releaseGroupId): ?array
     {
@@ -328,6 +336,16 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
         if ($response === null) {
             return null; // Rate limited, job released
+        }
+
+        // Handle 404 gracefully - release group not found in MusicBrainz
+        if ($response->status() === 404) {
+            Log::info('MusicBrainz: Release group not found (404)', [
+                'albumId' => $this->albumId,
+                'releaseGroupId' => $releaseGroupId,
+            ]);
+
+            return []; // Return empty array, not null (which means rate-limited)
         }
 
         return $response->json('releases', []);
@@ -346,6 +364,16 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
 
         if ($response === null) {
             return null;
+        }
+
+        // Handle 404 gracefully - release not found in MusicBrainz
+        if ($response->status() === 404) {
+            Log::info('MusicBrainz: Release not found (404)', [
+                'albumId' => $this->albumId,
+                'releaseId' => $releaseId,
+            ]);
+
+            return []; // Return empty array to trigger no-media handling
         }
 
         return $response->json('media', []);
@@ -470,7 +498,7 @@ class MusicBrainzFetchTracklist extends MusicBrainzJob implements ShouldBeUnique
     private function countEditionKeywords(array $release): int
     {
         $searchText = strtolower(
-            ($release['title'] ?? '') . ' ' . ($release['disambiguation'] ?? '')
+            ($release['title'] ?? '').' '.($release['disambiguation'] ?? '')
         );
 
         $count = 0;
