@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\Route;
 // Diagnostic route - bypasses views entirely
 Route::get('/ping', fn () => response('pong', 200, ['Content-Type' => 'text/plain']));
 
+// SEO routes - dynamic robots.txt with resolved APP_URL
+Route::get('/robots.txt', [\App\Http\Controllers\SeoController::class, 'robots'])->name('seo.robots');
+
 Route::get('/', function () {
     return view('welcome');
 })->name('home');

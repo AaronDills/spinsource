@@ -1,5 +1,13 @@
-<x-main-layout :transparentHeader="false" :showRecentReviews="false">
-    <x-slot name="title">{{ $artist->name }} - {{ config('app.name', 'Laravel') }}</x-slot>
+<x-main-layout
+    :transparentHeader="false"
+    :showRecentReviews="false"
+    :title="$seo['title']"
+    :description="$seo['description']"
+    :ogType="$seo['ogType']"
+    :ogImage="$seo['ogImage']"
+    :canonical="$seo['canonical']"
+    :jsonLd="$seo['jsonLd']"
+>
 
     <div class="max-w-4xl mx-auto px-4 py-8">
         <div class="card">

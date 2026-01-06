@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AlbumType;
 use App\Models\Artist;
+use App\Services\SeoService;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
@@ -19,11 +20,69 @@ class ArtistController extends Controller
         // Deduplicate links - one per type, preferring official and regional variants
         $deduplicatedLinks = $this->deduplicateLinks($artist->links);
 
+        // Build SEO data
+        $seo = $this->buildSeoData($artist);
+
         return view('artists.show', [
             'artist' => $artist,
             'albumsByType' => $albumsByType,
             'deduplicatedLinks' => $deduplicatedLinks,
+            'seo' => $seo,
         ]);
+    }
+
+    /**
+     * Build SEO metadata for the artist page.
+     */
+    private function buildSeoData(Artist $artist): array
+    {
+        $appName = config('app.name', 'Spinsearch');
+
+        // Build title
+        $title = $artist->name.' - '.$appName;
+
+        // Build description
+        $descriptionParts = [];
+
+        if ($artist->genres->isNotEmpty()) {
+            $descriptionParts[] = $artist->genres->pluck('name')->take(3)->join(', ').' artist';
+        } else {
+            $descriptionParts[] = 'Artist';
+        }
+
+        if ($artist->country) {
+            $descriptionParts[] = 'from '.$artist->country->name;
+        }
+
+        if ($artist->formed_year) {
+            $descriptionParts[] = 'formed in '.$artist->formed_year;
+        }
+
+        $albumCount = $artist->albums->count();
+        if ($albumCount > 0) {
+            $descriptionParts[] = 'with '.$albumCount.' '.($albumCount === 1 ? 'release' : 'releases');
+        }
+
+        $description = $artist->description
+            ? SeoService::truncateDescription($artist->description)
+            : SeoService::truncateDescription(
+                $artist->name.': '.implode(' ', $descriptionParts).'. Explore the complete discography on '.$appName.'.'
+            );
+
+        // Build OG image
+        $ogImage = null;
+        if ($artist->image_commons) {
+            $ogImage = 'https://commons.wikimedia.org/wiki/Special:FilePath/'.rawurlencode($artist->image_commons).'?width=600';
+        }
+
+        return [
+            'title' => $title,
+            'description' => $description,
+            'ogType' => 'music.musician',
+            'ogImage' => $ogImage,
+            'canonical' => route('artist.show', $artist),
+            'jsonLd' => SeoService::artistJsonLd($artist),
+        ];
     }
 
     /**

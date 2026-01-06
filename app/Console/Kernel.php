@@ -84,6 +84,21 @@ class Kernel extends ConsoleKernel
             ->then(fn () => Artisan::call('scout:queue-import', ['model' => 'App\Models\Artist']))
             ->then(fn () => Artisan::call('scout:queue-import', ['model' => 'App\Models\Album']))
             ->then(fn () => Artisan::call('scout:queue-import', ['model' => 'App\Models\Genre']));
+
+        /*
+        |--------------------------------------------------------------------------
+        | Sitemap Generation
+        |--------------------------------------------------------------------------
+        |
+        | Regenerate sitemap.xml daily at 4:00 AM.
+        | Includes all artist and album pages with lastmod timestamps.
+        |
+        */
+        $schedule->command('seo:generate-sitemap')
+            ->dailyAt('04:00')
+            ->name('seo:daily-sitemap')
+            ->onOneServer()
+            ->withoutOverlapping();
     }
 
     /**

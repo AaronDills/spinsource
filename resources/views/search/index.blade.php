@@ -1,6 +1,17 @@
-<x-main-layout :transparentHeader="false" :showRecentReviews="true">
-    <x-slot name="title">Search - {{ config('app.name', 'Spinsearch') }}</x-slot>
+@php
+    $hasQuery = request()->has('q') || request()->hasAny(['type', 'year', 'genre']);
+    $seoRobots = $hasQuery ? 'noindex, follow' : 'index, follow';
+    $seoCanonical = route('search.page');
+@endphp
 
+<x-main-layout
+    :transparentHeader="false"
+    :showRecentReviews="true"
+    title="Search Artists and Albums - {{ config('app.name', 'Spinsearch') }}"
+    description="Search for artists and albums on Spinsearch. Explore complete discographies, discover artist histories, and find detailed information about your favorite music."
+    :robots="$seoRobots"
+    :canonical="$seoCanonical"
+>
     <div class="flex items-center justify-center min-h-[calc(100vh-16rem)]">
         <div class="w-full max-w-xl px-4">
             <h1 class="text-3xl font-bold text-gray-100 text-center mb-8">

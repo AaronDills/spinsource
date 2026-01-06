@@ -1,6 +1,10 @@
-<x-main-layout :transparentHeader="false" :showRecentReviews="false">
-    <x-slot name="title">{{ config('app.name', 'Spinsearch') }} - Understand the music you love</x-slot>
-
+<x-main-layout
+    :transparentHeader="false"
+    :showRecentReviews="false"
+    title="{{ config('app.name', 'Spinsearch') }} - Understand the music you love"
+    description="Spinsearch is a music encyclopedia for the curious listener. Explore complete discographies, discover artist histories, and navigate connections between albums, genres, and eras."
+    :jsonLd="\App\Services\SeoService::websiteJsonLd()"
+>
     <!-- Hero Section -->
     <section class="py-16 sm:py-24 px-4">
         <div class="max-w-3xl mx-auto text-center">

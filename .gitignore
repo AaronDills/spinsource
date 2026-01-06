@@ -20,3 +20,6 @@ yarn-error.log
 /.idea
 /.nova
 /.vscode
+
+# Generated sitemaps (regenerated daily)
+/public/sitemap*.xml
