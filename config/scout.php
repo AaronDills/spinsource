@@ -201,10 +201,12 @@ return [
                         ['name' => 'title', 'type' => 'string'],
                         ['name' => 'release_year', 'type' => 'int32', 'optional' => true],
                         ['name' => 'artist_name', 'type' => 'string', 'optional' => true],
+                        ['name' => 'rank_score', 'type' => 'int32', 'optional' => true, 'sort' => true],
                     ],
                 ],
                 'search-parameters' => [
                     'query_by' => 'title,artist_name',
+                    'sort_by' => '_text_match:desc,rank_score:desc',
                 ],
             ],
             'App\Models\Genre' => [

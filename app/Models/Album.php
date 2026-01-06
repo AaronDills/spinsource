@@ -63,6 +63,7 @@ class Album extends Model
         'tracklist_attempted_at',
         'tracklist_fetched_at',
         'tracklist_fetch_attempts',
+        'quality_score',
     ];
 
     protected $casts = [
@@ -71,6 +72,7 @@ class Album extends Model
         'tracklist_attempted_at' => 'datetime',
         'tracklist_fetched_at' => 'datetime',
         'tracklist_fetch_attempts' => 'integer',
+        'quality_score' => 'integer',
     ];
 
     public function artist(): BelongsTo
@@ -86,6 +88,61 @@ class Album extends Model
     public function ratings(): HasMany
     {
         return $this->hasMany(UserAlbumRating::class);
+    }
+
+    /**
+     * Compute quality score for search ranking.
+     *
+     * Formula (0-100 scale):
+     * - Wikipedia presence: +15
+     * - Cover image presence: +10
+     * - Description presence: +5
+     * - Has tracklist: +10
+     * - External IDs: Spotify (+10), Apple Music (+5), MusicBrainz RG (+5)
+     * - Artist quality bonus: up to +20 based on artist's quality_score
+     */
+    public static function computeQualityScore(array $data, ?int $artistQualityScore = null): int
+    {
+        $score = 0;
+
+        // Wikipedia presence
+        if (! empty($data['wikipedia_url'])) {
+            $score += 15;
+        }
+
+        // Cover image presence
+        if (! empty($data['cover_image_commons'])) {
+            $score += 10;
+        }
+
+        // Description presence
+        if (! empty($data['description'])) {
+            $score += 5;
+        }
+
+        // Has tracklist (indicates data completeness)
+        if (! empty($data['tracklist_fetched_at'])) {
+            $score += 10;
+        }
+
+        // External IDs
+        if (! empty($data['spotify_album_id'])) {
+            $score += 10;
+        }
+        if (! empty($data['apple_music_album_id'])) {
+            $score += 5;
+        }
+        if (! empty($data['musicbrainz_release_group_mbid'])) {
+            $score += 5;
+        }
+
+        // Artist quality bonus (up to 20 points)
+        if ($artistQualityScore !== null) {
+            $score += (int) min(20, $artistQualityScore * 0.2);
+        }
+
+        // Cap at 100
+        return (int) min(100, round($score));
     }
 
     /**
@@ -106,7 +163,7 @@ class Album extends Model
     protected function makeAllSearchableUsing(Builder $query): Builder
     {
         return $query
-            ->select(['id', 'title', 'release_year', 'artist_id'])
+            ->select(['id', 'title', 'release_year', 'artist_id', 'quality_score'])
             ->with('artist:id,name');
     }
 
@@ -119,6 +176,7 @@ class Album extends Model
             'artist_name' => $this->relationLoaded('artist')
                 ? $this->artist?->name
                 : $this->artist()->value('name'),
+            'rank_score' => $this->quality_score ?? 0,
         ];
     }
 }
