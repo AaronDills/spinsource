@@ -38,9 +38,10 @@ class AdminJobController extends Controller
 
         $validated = $request->validate([
             'job_key' => 'required|string',
+            'params' => 'nullable|array',
         ]);
 
-        $result = $this->jobs->dispatchJob($validated['job_key']);
+        $result = $this->jobs->dispatchJob($validated['job_key'], $validated['params'] ?? []);
 
         if (! $result['dispatched']) {
             return response()->json([

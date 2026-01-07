@@ -219,6 +219,10 @@ function renderJobCard(job) {
         ? `<div class="text-sm text-gray-300">Last success: ${lastSuccess.finished_at_human || lastSuccess.started_at_human}</div>`
         : '<div class="text-sm text-gray-500">Last success: never</div>';
 
+    const paramsHint = job.requires_params
+        ? `<div class="text-xs text-amber-300 mt-2">${job.params_help || 'Requires parameters to run.'}</div>`
+        : '';
+
     return `
         <div class="p-5 rounded-lg border border-gray-700 bg-gray-800 shadow">
             <div class="flex items-start justify-between gap-4">
@@ -228,6 +232,7 @@ function renderJobCard(job) {
                         <span class="px-2 py-0.5 text-xs rounded bg-gray-700 text-gray-200">${job.queue}</span>
                     </div>
                     <p class="text-sm text-gray-400 mt-1">${job.description}</p>
+                    ${paramsHint}
                 </div>
                 <div class="flex flex-col gap-2">
                     <button data-dispatch="${job.key}" onclick="dispatchJob('${job.key}')" class="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition-colors">Start job</button>
@@ -267,6 +272,8 @@ function statusBadgeClass(status) {
 async function dispatchJob(jobKey) {
     const btn = document.querySelector(`[data-dispatch="${jobKey}"]`);
     const token = document.querySelector('meta[name="csrf-token"]').content;
+    const job = lastPayload?.jobs?.find(item => item.key === jobKey);
+    let params = null;
 
     if (btn) {
         btn.disabled = true;
@@ -275,6 +282,27 @@ async function dispatchJob(jobKey) {
     }
 
     try {
+        if (job?.requires_params) {
+            const promptText = job.params_help
+                ? `Enter JSON parameters for ${job.label}.\n${job.params_help}`
+                : `Enter JSON parameters for ${job.label}.`;
+            const example = job.params_example || '{}';
+            const input = prompt(promptText, example);
+            if (input === null) {
+                return;
+            }
+
+            try {
+                params = JSON.parse(input);
+            } catch (parseError) {
+                throw new Error(`Invalid JSON: ${parseError.message}`);
+            }
+
+            if (params === null || Array.isArray(params) || typeof params !== 'object') {
+                throw new Error('Parameters must be a JSON object.');
+            }
+        }
+
         const res = await fetch(DISPATCH_URL, {
             method: 'POST',
             credentials: 'same-origin',
@@ -282,7 +310,7 @@ async function dispatchJob(jobKey) {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': token,
             },
-            body: JSON.stringify({ job_key: jobKey }),
+            body: JSON.stringify({ job_key: jobKey, params }),
         });
 
         const data = await res.json();
