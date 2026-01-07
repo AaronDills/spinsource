@@ -6,8 +6,13 @@ use App\Jobs\Incremental\DiscoverChangedArtists;
 use App\Jobs\Incremental\DiscoverChangedGenres;
 use App\Jobs\Incremental\DiscoverNewArtistIds;
 use App\Jobs\Incremental\DiscoverNewGenres;
+use App\Jobs\Incremental\EnrichChangedGenres;
 use App\Jobs\Incremental\RefreshAlbumsForChangedArtists;
+use App\Jobs\MusicBrainzFetchTracklist;
 use App\Jobs\MusicBrainzSeedTracklists;
+use App\Jobs\WikidataEnrichAlbumCovers;
+use App\Jobs\WikidataEnrichArtists;
+use App\Jobs\WikidataRecomputeSortNames;
 use App\Jobs\WikidataSeedAlbums;
 use App\Jobs\WikidataSeedArtistIds;
 use App\Jobs\WikidataSeedGenres;
@@ -46,6 +51,17 @@ class AdminJobManager
                 'job_class' => DiscoverChangedGenres::class,
                 'queue' => 'wikidata',
                 'category' => 'Wikidata Incremental',
+            ],
+            'enrich_changed_genres' => [
+                'key' => 'enrich_changed_genres',
+                'label' => 'Enrich Changed Genres',
+                'description' => 'Re-fetches genre details for a supplied list of QIDs.',
+                'job_class' => EnrichChangedGenres::class,
+                'queue' => 'wikidata',
+                'category' => 'Wikidata Incremental',
+                'requires_params' => true,
+                'params_help' => 'Requires a genreQids array (e.g. {"genreQids":["Q11399","Q1344"]}).',
+                'params_example' => '{"genreQids":["Q11399","Q1344"]}',
             ],
             'discover_new_artist_ids' => [
                 'key' => 'discover_new_artist_ids',
@@ -95,6 +111,39 @@ class AdminJobManager
                 'queue' => 'wikidata',
                 'category' => 'Wikidata Backfill',
             ],
+            'enrich_artists' => [
+                'key' => 'enrich_artists',
+                'label' => 'Enrich Artists',
+                'description' => 'Enriches artists by Wikidata QID list.',
+                'job_class' => WikidataEnrichArtists::class,
+                'queue' => 'wikidata',
+                'category' => 'Wikidata Enrichment',
+                'requires_params' => true,
+                'params_help' => 'Requires an artistQids array (e.g. {"artistQids":["Q183","Q3399"]}).',
+                'params_example' => '{"artistQids":["Q183","Q3399"]}',
+            ],
+            'enrich_album_covers' => [
+                'key' => 'enrich_album_covers',
+                'label' => 'Enrich Album Covers',
+                'description' => 'Adds missing cover images for albums by Wikidata QID list.',
+                'job_class' => WikidataEnrichAlbumCovers::class,
+                'queue' => 'wikidata',
+                'category' => 'Wikidata Enrichment',
+                'requires_params' => true,
+                'params_help' => 'Requires an albumQids array (e.g. {"albumQids":["Q123","Q456"]}).',
+                'params_example' => '{"albumQids":["Q123","Q456"]}',
+            ],
+            'recompute_artist_sort_names' => [
+                'key' => 'recompute_artist_sort_names',
+                'label' => 'Recompute Artist Sort Names',
+                'description' => 'Recomputes sort_name from Wikidata name components.',
+                'job_class' => WikidataRecomputeSortNames::class,
+                'queue' => 'wikidata',
+                'category' => 'Wikidata Enrichment',
+                'requires_params' => true,
+                'params_help' => 'Requires an artistQids array (e.g. {"artistQids":["Q183","Q3399"]}).',
+                'params_example' => '{"artistQids":["Q183","Q3399"]}',
+            ],
             'musicbrainz_seed_tracklists' => [
                 'key' => 'musicbrainz_seed_tracklists',
                 'label' => 'MusicBrainz Tracklist Sync',
@@ -102,6 +151,17 @@ class AdminJobManager
                 'job_class' => MusicBrainzSeedTracklists::class,
                 'queue' => 'musicbrainz',
                 'category' => 'MusicBrainz',
+            ],
+            'musicbrainz_fetch_tracklist' => [
+                'key' => 'musicbrainz_fetch_tracklist',
+                'label' => 'MusicBrainz Fetch Tracklist',
+                'description' => 'Fetches tracklist data for a specific album ID.',
+                'job_class' => MusicBrainzFetchTracklist::class,
+                'queue' => 'musicbrainz',
+                'category' => 'MusicBrainz',
+                'requires_params' => true,
+                'params_help' => 'Requires albumId (e.g. {"albumId":123,"forceReselect":false}).',
+                'params_example' => '{"albumId":123,"forceReselect":false}',
             ],
         ];
     }
@@ -141,7 +201,7 @@ class AdminJobManager
     /**
      * Dispatch a job by key.
      */
-    public function dispatchJob(string $jobKey): array
+    public function dispatchJob(string $jobKey, array $params = []): array
     {
         $definition = $this->definitions()[$jobKey] ?? null;
         if (! $definition) {
@@ -154,7 +214,7 @@ class AdminJobManager
         $jobClass = $definition['job_class'];
 
         try {
-            $job = new $jobClass;
+            $job = $this->makeJob($jobClass, $params);
 
             if (! empty($definition['queue'])) {
                 $job->onQueue($definition['queue']);
@@ -170,6 +230,7 @@ class AdminJobManager
         } catch (\Throwable $e) {
             Log::error('Failed to dispatch admin job', [
                 'job' => $jobClass,
+                'params' => $params,
                 'error' => $e->getMessage(),
             ]);
 
@@ -178,6 +239,37 @@ class AdminJobManager
                 'message' => 'Dispatch failed: '.$e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Build a job instance with optional named constructor params.
+     */
+    protected function makeJob(string $jobClass, array $params = []): object
+    {
+        $reflection = new \ReflectionClass($jobClass);
+        $constructor = $reflection->getConstructor();
+
+        if (! $constructor) {
+            return new $jobClass;
+        }
+
+        $args = [];
+        foreach ($constructor->getParameters() as $parameter) {
+            $name = $parameter->getName();
+            if (array_key_exists($name, $params)) {
+                $args[] = $params[$name];
+                continue;
+            }
+
+            if ($parameter->isDefaultValueAvailable()) {
+                $args[] = $parameter->getDefaultValue();
+                continue;
+            }
+
+            throw new \InvalidArgumentException("Missing required parameter: {$name}");
+        }
+
+        return $reflection->newInstanceArgs($args);
     }
 
     /**
