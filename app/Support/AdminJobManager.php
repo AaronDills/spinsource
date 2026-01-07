@@ -154,7 +154,13 @@ class AdminJobManager
         $jobClass = $definition['job_class'];
 
         try {
-            dispatch(new $jobClass);
+            $job = new $jobClass;
+
+            if (! empty($definition['queue'])) {
+                $job->onQueue($definition['queue']);
+            }
+
+            dispatch($job);
 
             return [
                 'dispatched' => true,
