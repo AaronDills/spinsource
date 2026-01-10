@@ -40,8 +40,69 @@ class JobIdempotencyTest extends TestCase
      */
     public function test_wikidata_seed_albums_is_idempotent(): void
     {
-        // Skip if SPARQL queries aren't seeded in test database
-        $this->markTestSkipped('Requires SPARQL query seeder - test Album::upsert directly instead');
+        Carbon::setTestNow('2024-01-02 00:00:00');
+
+        // Seed the query
+        DataSourceQuery::create([
+            'name' => 'albums',
+            'data_source' => 'wikidata',
+            'query_type' => 'sparql',
+            'query' => 'SELECT ?album ?artist ?albumLabel WHERE { VALUES ?artist { {{values}} } ?album wdt:P175 ?artist. } LIMIT 100',
+            'is_active' => true,
+        ]);
+
+        // Create an artist with wikidata_qid so the job has something to fetch
+        $artist = Artist::create([
+            'name' => 'The Beatles',
+            'wikidata_qid' => 'Q1299',
+        ]);
+
+        $bindingsFirst = [
+            [
+                'album' => ['value' => 'http://www.wikidata.org/entity/Q210593'],
+                'artist' => ['value' => 'http://www.wikidata.org/entity/Q1299'],
+                'albumLabel' => ['value' => 'Abbey Road'],
+                'albumDescription' => ['value' => 'Studio album by The Beatles'],
+                'publicationDate' => ['value' => '1969-09-26'],
+            ],
+        ];
+
+        $bindingsSecond = [
+            [
+                'album' => ['value' => 'http://www.wikidata.org/entity/Q210593'],
+                'artist' => ['value' => 'http://www.wikidata.org/entity/Q1299'],
+                'albumLabel' => ['value' => 'Abbey Road (Remastered)'],
+                'albumDescription' => ['value' => 'Remastered studio album by The Beatles'],
+                'publicationDate' => ['value' => '1969-09-26'],
+            ],
+        ];
+
+        Http::fake([
+            '*' => Http::sequence()
+                ->push(['results' => ['bindings' => $bindingsFirst]], 200)
+                ->push(['results' => ['bindings' => $bindingsSecond]], 200),
+        ]);
+
+        $job = new WikidataSeedAlbums(null, 25, true);
+        $job->handle();
+
+        $this->assertDatabaseHas('albums', [
+            'wikidata_qid' => 'Q210593',
+            'title' => 'Abbey Road',
+            'artist_id' => $artist->id,
+        ]);
+
+        $job2 = new WikidataSeedAlbums(null, 25, true);
+        $job2->handle();
+
+        $this->assertDatabaseCount('albums', 1);
+        $this->assertDatabaseHas('albums', [
+            'wikidata_qid' => 'Q210593',
+            'title' => 'Abbey Road (Remastered)',
+            'artist_id' => $artist->id,
+        ]);
+
+        Carbon::setTestNow();
     }
 
     /**
